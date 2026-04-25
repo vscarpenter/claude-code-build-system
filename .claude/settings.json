@@ -1,0 +1,58 @@
+{
+  "$comment": "Goes in <project>/.claude/settings.json. Team baseline. Check this in. Personal allowances belong in settings.local.json (gitignored).",
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/.env.local)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Edit(package-lock.json)",
+      "Edit(yarn.lock)",
+      "Edit(bun.lockb)",
+      "Edit(pnpm-lock.yaml)",
+      "Edit(Cargo.lock)",
+      "Edit(Gemfile.lock)",
+      "Edit(poetry.lock)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/protect-files.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/format-edits.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "$comment": "Fast last-line typecheck. Replace bun typecheck with whatever is fast in your stack: tsc --noEmit, mypy, cargo check, swift build.",
+            "type": "command",
+            "command": "bun typecheck 2>&1 | tail -10",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
