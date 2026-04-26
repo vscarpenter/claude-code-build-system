@@ -23,9 +23,11 @@ claude-code-build-system/
 │   └── hooks/            Cross-project hooks (audit, capture, memory)
 ├── templates/            Starting points you customize per project
 │   ├── CLAUDE.md         Project context loaded every session
-│   ├── coding-standards.md
+│   ├── coding-standards.md  Skeleton with section headers
 │   ├── lessons.md        Project-specific gotchas
 │   └── todo.md           In-flight work
+├── examples/             Fully-populated reference docs you can adapt
+│   └── coding-standards.md  ~750-line worked example
 └── docs/                 Walkthroughs and rationale
 ```
 
@@ -90,7 +92,7 @@ That's the minimum viable setup. Add the rest when you feel their absence.
 
 | Principle | What's in the repo |
 |---|---|
-| 1. Standards once, referenced everywhere | `templates/CLAUDE.md`, `templates/coding-standards.md` |
+| 1. Standards once, referenced everywhere | `templates/CLAUDE.md`, `templates/coding-standards.md`, `examples/coding-standards.md` |
 | 2. Make the right thing automatic | `global/hooks/`, `.claude/settings.json` |
 | 3. Specialists beat generalists | `.claude/agents/` |
 | 4. Rituals deserve commands | `.claude/commands/` |
@@ -137,13 +139,23 @@ You'll also want a `settings.local.json` (gitignored) for personal allowances th
 
 ---
 
+## Two views of `coding-standards.md`
+
+Standards are the highest-leverage piece of this system, so the repo ships two versions:
+
+- **`templates/coding-standards.md`** — a 236-line skeleton. Section headers, a few worked examples, and the *reason matters* framing. Drop it into a new project and fill in the rules.
+- **`examples/coding-standards.md`** — the fully-populated 753-line version I run against my own projects. Read it for the shape of a real standards doc; copy what fits. Do not adopt it verbatim. Your project's rules and reasons are not mine.
+
+The flow: skim the example to see the depth, copy the template into your project, fill it in with rules grounded in *your* incidents and *your* stack.
+
+---
+
 ## What's intentionally missing
 
-Three things you won't find in this repo:
+Two things you won't find in this repo:
 
-1. **A 753-line `coding-standards.md`.** The template is a skeleton with section headers and a few worked examples. Your real standards doc is yours to build.
-2. **Project-specific `lessons.md` content.** The example file shows the format. Your gotchas come from your projects.
-3. **A `settings.local.json`.** That file is personal, gitignored, and varies by user. Build your own as you go.
+1. **Project-specific `lessons.md` content.** The example file shows the format. Your gotchas come from your projects.
+2. **A `settings.local.json`.** That file is personal, gitignored, and varies by user. Build your own as you go.
 
 The repo gives you the system. The content goes in over time.
 

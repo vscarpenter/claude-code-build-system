@@ -2,7 +2,7 @@
 
 This file defines the prescriptive rules for AI-assisted development on this project. It is the long-form companion to `CLAUDE.md`. Skills, subagents, and slash commands reference it on demand.
 
-The original lives at the repo root and weighs about 750 lines when populated. This template is the skeleton. Add your project's real rules under each section, with the *reason* behind each rule.
+A fully-populated reference version lives at `examples/coding-standards.md` (about 750 lines). This template is the skeleton. Add your project's real rules under each section, with the *reason* behind each rule.
 
 The reason matters. "Use parameterized queries" without "to prevent SQL injection because of this attack pattern" produces a parrot. Include the why and you produce a thinker.
 

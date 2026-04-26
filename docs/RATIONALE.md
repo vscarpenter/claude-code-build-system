@@ -64,6 +64,12 @@ The repo is a teaching tool, not a working project. Putting `CLAUDE.md` and `cod
 
 The `templates/` directory makes the relationship explicit: copy these into your project, then customize.
 
+## Why `examples/` exists alongside `templates/`
+
+A skeleton tells you the *shape*. A populated example tells you the *depth*. Both are useful, and they answer different questions.
+
+`templates/coding-standards.md` is the skeleton you copy and fill in. `examples/coding-standards.md` is a fully-populated version — the same file after months of incidents and decisions have been folded back into it. Read the example to calibrate how specific a real rule looks; copy the template to start your own. Mixing the two into one file would force the reader to pick: do I delete this rule because it doesn't apply, or keep it because it might? Keeping them separate lets the template stay aspirational and the example stay honest.
+
 ## Why `lessons.md` uses one-line entries
 
 Each lesson is a fact. Facts that need more than one line are usually two facts that should be split.
