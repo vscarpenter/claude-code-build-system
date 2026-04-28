@@ -36,9 +36,13 @@ cp ../settings.json ~/.claude/settings.json
 
 **Event:** `SessionEnd`
 **Matcher:** none
-**Cost:** One nested `claude --print` call per session end
+**Cost:** At most one nested `claude --print` call per session end, capped at 64 KB of transcript tail. Sessions that didn't edit any files skip the call entirely (see "Activity gate" below).
 **What it does:** Reads the session transcript at `transcript_path`, pipes it into a fresh `claude --print` invocation, asks the model to extract 1-3 reusable learnings, and appends them to `~/.claude/lessons.md`.
 **Why it matters:** Over weeks, that file becomes an institutional memory of patterns and gotchas you would otherwise forget.
+
+**Activity gate.** Before calling `claude --print`, the hook checks `~/.claude/decisions/` (populated by `capture-decision.sh`) for any entries tagged with the current `session_id`. If the session produced no Edit/Write events, it exits 0 without making an API call. Read-only or trivial sessions cost nothing.
+
+**Recursion guard.** The nested `claude --print` invocation is itself a Claude Code session, and its SessionEnd would re-fire this hook. To prevent the loop, the hook exports `CLAUDE_PERSIST_MEMORY_RUNNING=1` before calling out; any nested invocation sees the sentinel and exits immediately. Without this guard, a single SessionEnd could chain into multiple paid API calls.
 
 ## Verification
 

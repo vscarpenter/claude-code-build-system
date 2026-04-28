@@ -18,6 +18,16 @@ log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$DEBUG_LOG"
 }
 
+# Recursion guard: the `claude --print` call below spawns a nested session.
+# If that session's SessionEnd fires hooks, this script would re-invoke
+# itself and burn another API call on a transcript of its own prompt.
+# An exported sentinel breaks the cycle — child processes inherit it.
+if [ -n "${CLAUDE_PERSIST_MEMORY_RUNNING:-}" ]; then
+  log "nested invocation detected; exiting 0"
+  exit 0
+fi
+export CLAUDE_PERSIST_MEMORY_RUNNING=1
+
 # Guard: refuse to block on a TTY if someone runs this directly.
 if [ -t 0 ]; then
   echo "persist-memory.sh: expects hook JSON on stdin; refusing to read from TTY." >&2
@@ -26,6 +36,25 @@ fi
 
 INPUT=$(cat)
 log "hook invoked, input bytes=${#INPUT}"
+
+# Activity gate: skip the API call if the session didn't mutate any files.
+# capture-decision.sh logs every Edit/Write keyed by [session_id]; if there
+# are no entries for this session, there's nothing meaningful to summarize.
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
+DECISION_DIR="${CLAUDE_DECISION_DIR:-$HOME/.claude/decisions}"
+if [ -n "$SESSION_ID" ] && [ -d "$DECISION_DIR" ]; then
+  TODAY=$(date '+%Y-%m-%d')
+  # Long sessions can cross midnight, so check yesterday's log too.
+  # `date -v-1d` is BSD/macOS; `date -d 'yesterday'` is GNU/Linux.
+  YESTERDAY=$(date -v-1d '+%Y-%m-%d' 2>/dev/null || date -d 'yesterday' '+%Y-%m-%d' 2>/dev/null || echo "")
+  TODAY_LOG="$DECISION_DIR/decisions-$TODAY.log"
+  YESTERDAY_LOG="$DECISION_DIR/decisions-$YESTERDAY.log"
+  if ! grep -q "\[$SESSION_ID\]" "$TODAY_LOG" 2>/dev/null \
+     && ! grep -q "\[$SESSION_ID\]" "$YESTERDAY_LOG" 2>/dev/null; then
+    log "no edits recorded for session $SESSION_ID; exiting 0"
+    exit 0
+  fi
+fi
 
 # Claude Code hook payloads expose the transcript as a file path.
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
