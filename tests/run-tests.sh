@@ -103,6 +103,41 @@ test_build_next_reads_manifest_config() {
   assert_grep "$f" 'never merge'
 }
 
+make_gh_mock() {  # $1 = bin dir; creates a gh that logs args and succeeds
+  cat > "$1/gh" <<'EOF'
+#!/usr/bin/env bash
+echo "$@" >> "${GH_MOCK_LOG:?}"
+exit 0
+EOF
+  chmod +x "$1/gh" 2>/dev/null || /bin/chmod +x "$1/gh"
+}
+
+test_tier2_is_cumulative_and_adds_pipeline_artifacts() {
+  local t; t="$(make_target_repo)"; local bin; bin="$(mktemp -d)"; make_gh_mock "$bin"
+  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH"
+    cd "$ROOT" && ./install.sh --tier 2 --target "$t" >/dev/null ) || fail "install exited nonzero"
+  assert_file "$t/CLAUDE.md"
+  assert_file "$t/.github/ISSUE_TEMPLATE/change_request.yml"
+  assert_file "$t/.claude/commands/build-next.md"
+  assert_file "$t/scripts/parse-risk-tier.cjs"
+  assert_no_file "$t/labels.json"
+  assert_eq "2" "$(jq -r .tier "$t/.build-system.json")"
+  grep -q "label create ready-for-agent" "$bin/log" || fail "labels not applied"
+  assert_eq "15" "$(grep -c "label create" "$bin/log")"
+}
+
+test_missing_gh_labels_step_is_nonfatal() {
+  local t; t="$(make_target_repo)"
+  # A bin dir shadowing gh with a hard failure simulates gh missing/unauthed.
+  local bin; bin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$bin/gh"
+  chmod +x "$bin/gh" 2>/dev/null || /bin/chmod +x "$bin/gh"
+  local out
+  out="$( export PATH="$bin:$PATH"
+    cd "$ROOT" && ./install.sh --tier 2 --target "$t" 2>&1 )" || fail "nonzero exit"
+  echo "$out" | grep -q "MANUAL:" || fail "no manual fallback printed"
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"
