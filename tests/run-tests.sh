@@ -109,6 +109,68 @@ test_dry_run_writes_nothing() {
   assert_no_file "$t/CLAUDE.md"; assert_no_file "$t/.build-system.json"
 }
 
+# Assertions below slice the installer's output at the NEXT STEPS banner rather
+# than grepping the whole log. Per-file INSTALL/WROTE lines already mention
+# things like BS_REPO, so a whole-output grep would pass without the block
+# existing at all.
+next_steps_block() { sed -n '/NEXT STEPS/,$p'; }
+
+# The installer is where "what do I do now?" is actually asked, so it answers
+# for the tier it just installed and nothing more. A tier-1 adopter has no
+# labels and no manifest config to fill in; handing them the pipeline steps
+# would be the same wall of instructions the walkthrough exists to replace.
+test_next_steps_are_tier_specific() {
+  local t out
+  t="$(make_target_repo)"
+  out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1 | next_steps_block)"
+  [ -n "$out" ] || fail "tier 1 printed no next steps"
+  echo "$out" | grep -q "docs/getting-started.md" || fail "tier 1 omits the walkthrough pointer"
+  echo "$out" | grep -q "ready-for-agent" && fail "tier 1 next steps leak tier-2 instructions"
+
+  local bin; bin="$(mktemp -d)"; make_gh_mock "$bin"
+  t="$(make_target_repo)"
+  out="$( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$(mktemp -d)"
+          cd "$ROOT" && ./install.sh --tier 2 --target "$t" 2>&1 | next_steps_block )"
+  [ -n "$out" ] || fail "tier 2 printed no next steps"
+  echo "$out" | grep -q "\.build-system\.json" || fail "tier 2 omits the config step"
+  echo "$out" | grep -q "ready-for-agent" || fail "tier 2 omits the triage step"
+  echo "$out" | grep -q "/build-next" || fail "tier 2 omits how to run the builder"
+  return 0
+}
+
+# Tier 3's last mile is deliberately not automated: the installer never loads a
+# launchd job. The handoff only works if it says so.
+test_tier3_next_steps_cover_the_scheduler_handoff() {
+  local t; t="$(make_target_repo)"; local bin; bin="$(mktemp -d)"
+  make_gh_mock "$bin"
+  local out; out="$( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$(mktemp -d)"
+                     cd "$ROOT" && ./install.sh --tier 3 --target "$t" 2>&1 | next_steps_block )"
+  [ -n "$out" ] || fail "tier 3 printed no next steps"
+  echo "$out" | grep -q "BS_REPO" || fail "tier 3 omits the env-file step"
+  echo "$out" | grep -q "builder-run.sh --check" || fail "tier 3 omits the dry-check"
+  echo "$out" | grep -qi "launchctl\|cron" || fail "tier 3 omits loading the scheduler"
+  echo "$out" | grep -q "Night Shift Control" || fail "tier 3 omits the control issue"
+}
+
+test_dry_run_prints_no_next_steps() {
+  local t; t="$(make_target_repo)"
+  local out; out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" --dry-run 2>&1)"
+  echo "$out" | grep -q "NEXT STEPS" && fail "dry-run printed next steps for an install it did not perform"
+  return 0
+}
+
+# An upgrade lands in a repo that has been running the system for months. Its
+# next steps are about what the merge left behind, not first-run setup.
+test_upgrade_next_steps_replace_first_run_setup() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "install exited nonzero"
+  local out; out="$(cd "$ROOT" && ./install.sh --upgrade --target "$t" 2>&1 | next_steps_block)"
+  [ -n "$out" ] || fail "upgrade printed no next steps"
+  echo "$out" | grep -qi "KEEP" || fail "upgrade omits the kept-files review"
+  echo "$out" | grep -q "docs/getting-started.md" && fail "upgrade re-sends the reader to the first-run walkthrough"
+  return 0
+}
+
 test_non_git_target_fails_fast() {
   local d; d="$(mktemp -d)"
   if (cd "$ROOT" && ./install.sh --tier 1 --target "$d" >/dev/null 2>&1); then fail "should have failed"; fi

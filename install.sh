@@ -149,6 +149,61 @@ do_install() {
   apply_labels
   write_ops_env
   note "Installed tier $TIER (v$SYSTEM_VERSION) into $TARGET"
+  next_steps
+}
+
+# The installer is where "what do I do now?" actually gets asked, so it answers
+# for the tier it just installed and nothing more. Each block is the short list
+# of things the system cannot do for itself; docs/getting-started.md carries the
+# full narrative. Printed last, after the per-file lines, so it is what remains
+# on screen. Never printed for --dry-run: nothing was installed to follow up on.
+next_steps() {
+  note ""
+  if [ "$UPGRADE" = 1 ]; then
+    note "NEXT STEPS (upgrade)"
+    note "  1. Review any KEEP lines above. Those files carry your local edits,"
+    note "     so this version's changes to them did not land."
+    note "  2. Read CHANGELOG.md for what moved in v$SYSTEM_VERSION."
+    note "  3. Commit $MANIFEST_NAME and the re-synced files."
+    return 0
+  fi
+
+  note "NEXT STEPS (tier $TIER)"
+  case "$TIER" in
+    1)
+      note "  1. Set the Stop hook command in .claude/settings.json. It ships inert;"
+      note "     replace \`true\` with your fast typecheck."
+      note "  2. Rewrite CLAUDE.md for this project. It ships as a filled-in example."
+      note "  3. Commit $MANIFEST_NAME and the installed files."
+      note "  4. Open Claude Code and run the loop: /qspec, then /tdd, then /qcheck."
+      ;;
+    2)
+      note "  1. Fill in \"config\" in $MANIFEST_NAME: verifyCommands, protectedPaths,"
+      note "     and branchPrefix. The agents refuse to run while REPLACE: remains,"
+      note "     and renaming branchPrefix later strands open PRs under the old name."
+      note "  2. Set the Stop hook in .claude/settings.json and rewrite CLAUDE.md"
+      note "     for this project (both ship from tier 1 as templates)."
+      note "  3. Commit $MANIFEST_NAME and the installed files."
+      note "  4. File a change with the issue form, then triage it in by swapping"
+      note "     needs-triage -> ready-for-agent. The form does not apply it for you."
+      note "  5. Run /build-next in Claude Code. Approve its plan at Gate 1 by"
+      note "     swapping plan:pending -> plan:approved."
+      ;;
+    3)
+      note "  1. Finish the tier 1 and 2 setup first: the \"config\" block in"
+      note "     $MANIFEST_NAME, CLAUDE.md, and the .claude/settings.json Stop hook."
+      note "  2. Set BS_REPO (owner/name) in $HOME/.build-system/$(basename "$TARGET").env"
+      note "  3. Check the wiring without spending a token:"
+      note "       bash scripts/build-system/builder-run.sh --check"
+      note "  4. Open an issue titled \"Night Shift Control\" and pin it. It receives"
+      note "     the nightly self-audit reports and carries the triage:paused switch."
+      note "  5. Schedule the drivers. Copy a .plist.template from"
+      note "     scripts/build-system/ to ~/Library/LaunchAgents/, replace"
+      note "     {{REPO_PATH}}, then launchctl load it. On Linux, use cron."
+      ;;
+  esac
+  note ""
+  note "  Full walkthrough: docs/getting-started.md"
 }
 
 write_manifest() {  # $1 = tier, $2 = "path<TAB>sha" file
