@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for the builder loop (macOS).
+  1. Replace {{REPO_PATH}} with your repo's absolute path.
+  2. Adjust the Hour/Minute entries for how often the builder should wake.
+     Wake-ups are cheap: the driver pre-checks labels and exits without
+     invoking Claude when there is no work.
+  3. Save as ~/Library/LaunchAgents/com.build-system.builder.<repo>.plist
+  4. launchctl load ~/Library/LaunchAgents/com.build-system.builder.<repo>.plist
+  Linux? Use cron instead:  0 9,13,17 * * *  {{REPO_PATH}}/scripts/build-system/builder-run.sh
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.build-system.builder</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{{REPO_PATH}}/scripts/build-system/builder-run.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/tmp/build-system-builder.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/build-system-builder.err</string>
+</dict>
+</plist>

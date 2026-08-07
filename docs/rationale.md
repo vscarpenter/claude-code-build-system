@@ -58,17 +58,11 @@ The post emphasizes that permissions are safety equipment and hooks are enforcem
 
 Personal allowances (the things you, but not your teammates, want to allow) belong in `settings.local.json`, which is gitignored. There's no example in this repo for that file because it's intentionally yours alone.
 
-## Why `templates/` instead of populating the files at the project root
+## Why `tiers/` mirrors a target repo instead of a `templates/` folder (v2)
 
-The repo is a teaching tool, not a working project. Putting `CLAUDE.md` and `coding-standards.md` at the repo root would imply they are the standards for *this* repo, when they are actually templates for *yours*.
+v1 kept a `templates/` directory you copied by hand. v2 replaces it with `tiers/`, where each tier's tree mirrors a target repo's layout exactly. The installer copies verbatim, which means the source tree *is* the documentation of where things land. There is no mapping table to keep in sync, and `diff -r tiers/1-session/ yourrepo/` answers "what would change" directly.
 
-The `templates/` directory makes the relationship explicit: copy these into your project, then customize.
-
-## Why `examples/` exists alongside `templates/`
-
-A skeleton tells you the *shape*. A populated example tells you the *depth*. Both are useful, and they answer different questions.
-
-`templates/coding-standards.md` is the skeleton you copy and fill in. `examples/coding-standards.md` is a fully-populated version — the same file after months of incidents and decisions have been folded back into it. Read the example to calibrate how specific a real rule looks; copy the template to start your own. Mixing the two into one file would force the reader to pick: do I delete this rule because it doesn't apply, or keep it because it might? Keeping them separate lets the template stay aspirational and the example stay honest.
+The old skeleton-versus-example split survives in spirit. `standards/coding-standards.md` is the fully populated doc the installer stamps into your repo, and `docs/coding-standards-skeleton.md` (installed with tier 1) is the empty shape for writing your own. A skeleton tells you the *shape*. A populated version tells you the *depth*.
 
 ## Why `lessons.md` uses one-line entries
 
@@ -104,3 +98,37 @@ LEARNINGS=$(cat "$TRANSCRIPT_PATH" | claude --print --bare \
 The post's footnote covers this: hooks are bash. Windows users need WSL or PowerShell equivalents. The repo could include PowerShell ports, but they would diverge from the bash versions over time, and the bash versions are the ones actually tested in daily use.
 
 If you port the hooks to PowerShell, send a PR. They'd live in `global/hooks/win/` or similar.
+
+---
+
+# v2 decisions
+
+Everything below arrived with v2, when the repo grew from session configuration into the installable pipeline.
+
+## Why an installer script instead of a Claude Code plugin
+
+A plugin can carry commands, skills, and hooks. It cannot manage `.github/` files, issue templates, labels, or scheduler scripts, which is half the system. One installer with one mental model beat two distribution mechanisms with a seam down the middle. The installer is bash for the same reason the hooks are: it starts instantly and runs anywhere.
+
+## Why a manifest with content hashes
+
+The hard problem in "install into 40 existing repos" is not copying files. It is upgrading later without destroying what each repo changed on purpose. The manifest records a sha256 per managed file at install time, which gives `--upgrade` a three-way signal: unmodified files re-sync silently, modified files are kept with a notice, and `--force` states intent explicitly. Homebrew and every serious dotfile manager converged on the same shape. Git subtree or submodules could version the files too, but they entangle your repo's history with mine, and their failure modes are famously unfriendly.
+
+## Why runtime config lives in the manifest, not in rendered templates
+
+The agent commands need three project facts: verify commands, protected paths, and a branch prefix. Rendering them into the command text at install time would fork every command file per repo, and `--upgrade` would have to re-render instead of re-sync. Keeping the commands generic and reading `.build-system.json` with `jq` at runtime means one canonical command text everywhere, upgradable by hash. The placeholders self-describe (`REPLACE: e.g. bun run test`) because JSON has no comments, and the builder escalates rather than run unconfigured.
+
+## Why local-first for the builder, with a hosted variant
+
+The battle-tested loop runs on a Mac under launchd. Local execution gets you cheap pre-checks (a `gh` label count before any Claude run), your own credentials and toolchain, and worktree isolation next to the checkout you already trust. The hosted variant exists because "a machine that is usually on" is a real barrier for some adopters, but it is documented as the second path: every trigger is a full Claude run, and the tool allowlist and OAuth token live in repo settings instead of your keychain.
+
+## Why labels are the state store
+
+Labels survive process restarts, cost nothing to read, are visible in the GitHub UI, and can be flipped from a phone. That last property is the point: Gate 1 and both kill switches are label swaps, so operating the pipeline requires no shell. The alternative (state files in the repo, or a database) would be invisible in the UI and would put pipeline state in commits.
+
+## What v2 deliberately leaves out
+
+- **npm/bun packaging and a marketplace plugin.** Two more distribution channels to keep honest; the installer already covers both new and existing repos.
+- **Windows-native support.** Same position as v1: bash under WSL works, native PowerShell ports would drift.
+- **AGENTS.md / Codex variants.** The standards doc marks the Claude-specific part, but shipping parallel agent configs doubles the test surface.
+- **Telemetry dashboards.** The token markers and run logs are grep-able; aggregation belongs to whoever needs it.
+- **Multi-standards support.** One canonical standards doc plus a skeleton. A standards *registry* is complexity without a second user.
