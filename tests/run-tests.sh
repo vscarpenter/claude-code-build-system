@@ -121,6 +121,104 @@ test_build_next_reads_manifest_config() {
   assert_grep "$f" 'never merge'
 }
 
+RISK_PARSER="$ROOT/tiers/2-pipeline/scripts/parse-risk-tier.cjs"
+RISK_FORM="$ROOT/tiers/2-pipeline/.github/ISSUE_TEMPLATE/change_request.yml"
+
+risk_tier() {  # $1 = rendered issue body; echoes the parsed tier, or "null"
+  node -e '
+    const { parseRiskTier } = require(process.argv[1]);
+    process.stdout.write(String(parseRiskTier(process.argv[2])));
+  ' "$RISK_PARSER" "$1"
+}
+
+risk_body() { printf '### Risk tier\n\n%s\n' "$1"; }
+
+test_risk_tier_parses_every_dropdown_option() {
+  local tier
+  for tier in docs chore feature risky; do
+    assert_eq "$tier" "$(risk_tier "$(risk_body "$tier")")" "for $tier"
+  done
+}
+
+test_risk_tier_is_case_insensitive_in_heading_and_value() {
+  assert_eq "feature" "$(risk_tier "$(printf '### RISK TIER\n\nFeature\n')")"
+  # Also covers whitespace padding around the answer.
+  assert_eq "risky" "$(risk_tier "$(printf '### Risk Tier\n\n  RISKY  \n')")"
+}
+
+test_risk_tier_accepts_every_markdown_heading_level() {
+  local h
+  for h in '#' '##' '###' '####' '#####' '######'; do
+    assert_eq "feature" "$(risk_tier "$(printf '%s Risk tier\n\nfeature\n' "$h")")" "for heading '$h'"
+  done
+  # Seven hashes is not a heading in Markdown and must not match.
+  assert_eq "null" "$(risk_tier "$(printf '####### Risk tier\n\nfeature\n')")"
+}
+
+test_risk_tier_heading_must_match_the_label_exactly() {
+  # "### Risk tier rationale" is a different section. Matching it would read the
+  # answer out of the wrong field, and would win because the first match is used.
+  assert_eq "null" "$(risk_tier "$(printf '### Risk tier rationale\n\nfeature\n')")"
+  assert_eq "docs" "$(risk_tier "$(printf '### Risk tier rationale\n\nfeature\n\n### Risk tier\n\ndocs\n')")"
+}
+
+test_risk_tier_handles_crlf_bodies() {
+  # GitHub delivers issue bodies with CRLF line endings.
+  assert_eq "chore" "$(risk_tier "$(printf '### Risk tier\r\n\r\nchore\r\n')")"
+}
+
+test_risk_tier_rejects_unanswered_junk_and_missing_sections() {
+  assert_eq "null" "$(risk_tier "$(risk_body '_No response_')")" "unanswered dropdown"
+  assert_eq "null" "$(risk_tier "$(risk_body 'medium')")" "value outside RISK_TIERS"
+  assert_eq "null" "$(risk_tier "$(risk_body 'risky is my guess')")" "prose around a valid word"
+  assert_eq "null" "$(risk_tier "$(printf '### Summary\n\nno risk section here\n')")" "heading absent"
+  assert_eq "null" "$(risk_tier "$(printf '### Risk tier\n\n### Affected areas\n\nsrc/\n')")" "empty section"
+  assert_eq "null" "$(risk_tier "$(printf '### Risk tier\n')")" "heading then end of body"
+}
+
+test_risk_tier_rejects_non_string_input() {
+  # The workflow hands it context.payload.issue.body, which is null on issues
+  # opened with no body at all.
+  local out; out="$(node -e '
+    const { parseRiskTier } = require(process.argv[1]);
+    process.stdout.write([undefined, null, 42, {}, [], ""].map((c) => String(parseRiskTier(c))).join(","));
+  ' "$RISK_PARSER")"
+  assert_eq "null,null,null,null,null,null" "$out"
+}
+
+test_risk_tier_parses_a_realistic_rendered_form_body() {
+  # GitHub renders one "### <label>" section per field, in form order; the
+  # dropdown is the sixth of eight.
+  local body; body="$(printf '%s\n' \
+    '### Summary' '' 'The footer shows a stale year.' '' \
+    '### Acceptance criteria' '' '- [ ] Footer shows the current year' '' \
+    '### Constraints' '' 'None' '' \
+    '### Out of scope' '' 'Nothing else' '' \
+    '### Rollback considerations' '' 'Revert the PR' '' \
+    '### Risk tier' '' 'chore' '' \
+    '### Affected areas (optional)' '' '_No response_')"
+  assert_eq "chore" "$(risk_tier "$body")"
+}
+
+test_risk_tiers_match_the_issue_form_dropdown() {
+  # Two lists that must stay identical: a rename in one place leaves the
+  # labeler silently unable to match any answer.
+  local form; form="$(sed -n '/id: risk$/,/validations/p' "$RISK_FORM" \
+    | sed -n 's/^ *- \([a-z]*\)$/\1/p' | tr '\n' ',')"
+  local mod; mod="$(node -e '
+    process.stdout.write(require(process.argv[1]).RISK_TIERS.join(",") + ",");
+  ' "$RISK_PARSER")"
+  assert_eq "$form" "$mod"
+  assert_eq "docs,chore,feature,risky," "$mod"   # guards against both going empty
+}
+
+test_risk_workflow_requires_the_installed_parser_path() {
+  # The workflow requires the parser by path from GITHUB_WORKSPACE; the
+  # installer places it at scripts/. Same wiring class as the night shift's.
+  assert_grep "$ROOT/tiers/2-pipeline/.github/workflows/apply-risk-label.yml" \
+    'scripts/parse-risk-tier\.cjs'
+}
+
 make_gh_mock() {  # $1 = bin dir; creates a gh that logs args and succeeds
   cat > "$1/gh" <<'EOF'
 #!/usr/bin/env bash

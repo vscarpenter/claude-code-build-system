@@ -12,7 +12,7 @@ The consequence, and the thing to internalize first: **almost everything under `
 - `tiers/1-session/CLAUDE.md` is a **template for adopters**, not instructions for working in this repo. This file is.
 - `tiers/1-session/.claude/` is payload. This repo has no `.claude/` of its own.
 - `standards/coding-standards.md` is payload too — the one shipped file that lives outside `tiers/`.
-- Payload is prose and config, so most changes are reviewed by reading, not by running. The test suite checks that files exist, install to the right place, and contain the strings other pieces depend on. The exception is `failing-agent-prs.cjs`, which carries real logic and gets real unit tests.
+- Payload is prose and config, so most changes are reviewed by reading, not by running. The test suite checks that files exist, install to the right place, and contain the strings other pieces depend on. The exception is the two `.cjs` modules, which carry real logic and get real unit tests driven through `node -e`.
 
 Shipped code is bash, jq, and a little Node (`.cjs`). No package manager, no build step, no dependencies beyond `jq`.
 
@@ -74,7 +74,7 @@ A GitHub issue form (`change_request.yml`) forces a contract: acceptance criteri
 - **The standards ship from outside the tier tree.** `standards/coding-standards.md` is the only copy, emitted directly by `plan_files()` for tier 1; `test_standards_have_exactly_one_copy_in_the_repo` fails if a duplicate reappears under `tiers/`. If you add another out-of-tree source, emit it **before** the tree walk: as a trailing `[ "$1" = N ] && printf`, a false test returns 1 and aborts the install for every other tier under `set -e` + `pipefail`.
 - **Bumping `VERSION` touches four files:** `VERSION`, the literal `assert_eq "2.0.0"` in `tests/run-tests.sh`, the distribution header in `standards/coding-standards.md`, and `CHANGELOG.md`.
 - **Tests that mutate `$ROOT`** (VERSION bumps, upstream-file edits) must restore it before asserting — a failing test otherwise poisons the working tree for every later test. See `test_upgrade_resyncs_unmodified_and_preserves_modified`.
-- **Cross-file vocabulary.** Risk tier names must match in `labels.json`, the `change_request.yml` dropdown, `RISK_TIERS` in `parse-risk-tier.cjs`, and `build-next.md`. Label names are referenced by name across both agent commands, the workflows, and the docs. Renaming is one deliberate pass, not a local edit.
+- **Cross-file vocabulary.** Risk tier names must match in `labels.json`, the `change_request.yml` dropdown, `RISK_TIERS` in `parse-risk-tier.cjs`, and `build-next.md`. `test_risk_tiers_match_the_issue_form_dropdown` pins the middle two; the other two are still on you. Label names are referenced by name across both agent commands, the workflows, and the docs. Renaming is one deliberate pass, not a local edit.
 - **`branchPrefix` resolves at runtime, from the manifest, along three paths.** `/build-next` and `/triage-prs` read `config.branchPrefix` themselves; `triage-run.sh` reads it with `jq` and hands it to `failing-agent-prs.cjs` as `BS_TRIAGE_BRANCH_PREFIX`. Every path falls back to `claude`. A blank prefix must never reach `startsWith("")` — that matches every branch name and would hand the night shift the whole PR queue, human branches included.
 - **Shipped shell scripts need the exec bit in git**, and `chmod` is denied by the permission config. Use `git update-index --chmod=+x <path>`. (`tiers/1-session/.claude/hooks/*.sh` are `100755`; `tiers/3-ops/local/*.sh` are currently `100644`.)
 
