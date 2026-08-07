@@ -35,6 +35,52 @@ test_tier1_source_tree_complete() {
   done
 }
 
+test_tier1_fresh_install_places_files_and_manifest() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "install exited nonzero"
+  for f in CLAUDE.md coding-standards.md .claude/settings.json tasks/lessons.md; do assert_file "$t/$f"; done
+  assert_file "$t/.build-system.json"
+  assert_eq "2.0.0" "$(jq -r .systemVersion "$t/.build-system.json")"
+  assert_eq "1" "$(jq -r .tier "$t/.build-system.json")"
+  local h; h="$(jq -r '.files[]|select(.path=="CLAUDE.md").sha256' "$t/.build-system.json")"
+  assert_eq "$h" "$(shasum -a 256 "$t/CLAUDE.md" | awk '{print $1}')"
+}
+
+test_reinstall_same_version_is_noop() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null)
+  local before; before="$(cd "$t" && find . -type f -not -path './.git/*' -exec shasum -a 256 {} + | sort | shasum)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "second run exited nonzero"
+  local after; after="$(cd "$t" && find . -type f -not -path './.git/*' -exec shasum -a 256 {} + | sort | shasum)"
+  assert_eq "$before" "$after"
+}
+
+test_existing_untracked_claude_md_is_skipped_with_warning() {
+  local t; t="$(make_target_repo)"; echo mine > "$t/CLAUDE.md"
+  local out; out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1)"
+  assert_eq "mine" "$(cat "$t/CLAUDE.md")"
+  echo "$out" | grep -q "SKIP" || fail "no skip warning"
+}
+
+test_force_adopts_existing_untracked_file() {
+  local t; t="$(make_target_repo)"; echo mine > "$t/CLAUDE.md"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" --force >/dev/null)
+  [ "$(cat "$t/CLAUDE.md")" != "mine" ] || fail "force did not overwrite"
+  jq -e '.files[]|select(.path=="CLAUDE.md")' "$t/.build-system.json" >/dev/null || fail "not tracked"
+}
+
+test_dry_run_writes_nothing() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" --dry-run >/dev/null) || fail "dry-run exited nonzero"
+  assert_no_file "$t/CLAUDE.md"; assert_no_file "$t/.build-system.json"
+}
+
+test_non_git_target_fails_fast() {
+  local d; d="$(mktemp -d)"
+  if (cd "$ROOT" && ./install.sh --tier 1 --target "$d" >/dev/null 2>&1); then fail "should have failed"; fi
+  assert_no_file "$d/CLAUDE.md"
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"
