@@ -1,6 +1,6 @@
 ---
 name: triage-prs
-description: Night-shift maintenance routine. Triages failing checks on the agent fleet's own open PRs — auto-fixing mechanical classes as fix PRs, escalating judgment ones, skipping the rest. Never merges.
+description: Night-shift maintenance routine. Triages failing checks on the agent fleet's own open PRs: auto-fixing mechanical classes as fix PRs, escalating judgment ones, skipping the rest. Never merges.
 ---
 
 # /triage-prs
@@ -9,11 +9,11 @@ You are the **night shift** for this repository's pipeline. Run headlessly and u
 
 **Runtime config:** read `.build-system.json` at the repo root. `config.verifyCommands` is how you reproduce and verify checks locally. `config.branchPrefix` (default `claude`) is the fleet's branch prefix. `config.protectedPaths` are paths you may never edit.
 
-**Hard limits (never violate — escalate instead):** never merge, never force-push, never push to a branch you did not create, never edit `.github/workflows/**`, deploy configuration, security config, or any path in `config.protectedPaths`, and **never patch around a security-scan failure**. You may only create `<branchPrefix>/fix-*` branches, open fix PRs targeting the failing branch, comment, and apply `ready-for-human` / labels. **At most 3 fix PRs this run.**
+**Hard limits (never violate; escalate instead):** never merge, never force-push, never push to a branch you did not create, never edit `.github/workflows/**`, deploy configuration, security config, or any path in `config.protectedPaths`, and **never patch around a security-scan failure**. You may only create `<branchPrefix>/fix-*` branches, open fix PRs targeting the failing branch, comment, and apply `ready-for-human` / labels. **At most 3 fix PRs this run.**
 
 ## Select work
 
-List open PRs whose head branch starts with `<branchPrefix>/`, that **originate from this repository itself** (not a fork), and that have at least one failing check (use `gh pr list --state open --json number,headRefName,headRepositoryOwner,isCrossRepository,statusCheckRollup`). A `<branchPrefix>/` branch name alone is **not** proof the PR is the fleet's own — a fork author picks their own branch names — so a PR only counts when `isCrossRepository` is `false` (equivalently, `headRepositoryOwner.login` equals this repo's owner). **Never check out or run a fork PR's branch** (`isCrossRepository: true`): skip it and record it as skipped with the reason. Process oldest-first. Skip any PR already labeled `ready-for-human`. Stop once you have opened **3 fix PRs**.
+List open PRs whose head branch starts with `<branchPrefix>/`, that **originate from this repository itself** (not a fork), and that have at least one failing check (use `gh pr list --state open --json number,headRefName,headRepositoryOwner,isCrossRepository,statusCheckRollup`). A `<branchPrefix>/` branch name alone is **not** proof the PR is the fleet's own, because a fork author picks their own branch names. A PR only counts when `isCrossRepository` is `false` (equivalently, `headRepositoryOwner.login` equals this repo's owner). **Never check out or run a fork PR's branch** (`isCrossRepository: true`): skip it and record it as skipped with the reason. Process oldest-first. Skip any PR already labeled `ready-for-human`. Stop once you have opened **3 fix PRs**.
 
 ## For each failing check on a PR
 

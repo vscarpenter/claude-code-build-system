@@ -195,6 +195,13 @@ test_actions_builder_variant_present_and_wired() {
   assert_grep "$f" '/build-next'
 }
 
+test_docs_reference_real_flags_and_paths() {
+  for d in architecture adoption runbook rationale customizing; do assert_file "$ROOT/docs/$d.md"; done
+  assert_grep "$ROOT/docs/adoption.md" '\-\-upgrade'
+  assert_grep "$ROOT/docs/architecture.md" 'stateDiagram'
+  assert_grep "$ROOT/docs/adoption.md" 'tier 1'
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"
