@@ -16,6 +16,8 @@ Adopt the system in tiers. Each tier is useful on its own, each includes everyth
 
 Tiers are cumulative: `--tier 2` installs tier 1 as well. Add `--dry-run` to see the plan first.
 
+This page covers what each tier contains and how the installer decides what to write. For what to do once it finishes, read [getting-started.md](getting-started.md).
+
 ## What the installer will not do
 
 It never overwrites a file it did not install. If you already have a `CLAUDE.md`, the installer skips it, tells you, and moves on. Pass `--force` to adopt existing files into management. It also never loads launchd jobs or starts services; tier 3 prints the instructions and leaves the last step to you.

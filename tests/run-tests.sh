@@ -513,10 +513,25 @@ test_actions_builder_variant_present_and_wired() {
 }
 
 test_docs_reference_real_flags_and_paths() {
-  for d in architecture adoption runbook rationale customizing; do assert_file "$ROOT/docs/$d.md"; done
+  for d in getting-started architecture adoption runbook rationale customizing; do
+    assert_file "$ROOT/docs/$d.md"
+  done
   assert_grep "$ROOT/docs/adoption.md" '\-\-upgrade'
   assert_grep "$ROOT/docs/architecture.md" 'stateDiagram'
   assert_grep "$ROOT/docs/adoption.md" 'tier 1'
+}
+
+# The walkthrough exists to carry the setup facts that live nowhere else in the
+# docs. These three are the ones an adopter cannot recover by reading the code:
+# the form does not self-triage, the Actions workflows need a repo secret, and
+# tier 3's last mile is a scheduler the installer deliberately never loads.
+test_walkthrough_covers_the_undiscoverable_setup_steps() {
+  local d="$ROOT/docs/getting-started.md"
+  assert_grep "$d" 'needs-triage'
+  assert_grep "$d" 'CLAUDE_CODE_OAUTH_TOKEN'
+  assert_grep "$d" 'Night Shift Control'
+  assert_grep "$d" 'launchctl'
+  assert_grep "$d" 'REPLACE:'
 }
 
 test_readme_quickstart_commands_are_real() {

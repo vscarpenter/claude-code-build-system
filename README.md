@@ -30,7 +30,9 @@ cd claude-code-build-system
 
 Tiers are cumulative. Add `--dry-run` to preview, `--force` to adopt files you already have. The installer writes a `.build-system.json` manifest recording the version and a hash of every file it manages; `./install.sh --upgrade` later re-syncs what you have not modified and keeps what you have. Details in [docs/adoption.md](docs/adoption.md).
 
-After installing tier 2, fill in the `config` block of `.build-system.json` (verify commands, protected paths, branch prefix). The agents read it at runtime and refuse to run unconfigured.
+**What happens after the install** is in [docs/getting-started.md](docs/getting-started.md): what to configure, how to verify it took, and one change tracked from the issue form to a merged PR. The installer prints the short version of those steps when it finishes.
+
+Tier 2 and up will not run until you fill in the `config` block of `.build-system.json` (verify commands, protected paths, branch prefix). The agents read it at runtime and escalate rather than run unconfigured.
 
 ## What's in here
 
@@ -43,7 +45,7 @@ claude-code-build-system/
 │   ├── 2-pipeline/       Mirrors your repo: .github/, agent commands + labels.json
 │   └── 3-ops/            Drivers, plist templates, night-shift spec, hosted variant
 ├── global/               Goes in ~/.claude/ on your machine (unchanged from v1)
-├── docs/                 architecture · adoption · runbook · rationale · customizing
+├── docs/                 getting-started · architecture · adoption · runbook · rationale · customizing
 └── tests/                The installer's test suite (plain bash, runs in CI)
 ```
 
@@ -74,7 +76,7 @@ Readers arriving from the April post: everything survived, most of it moved.
 
 ## Operating it
 
-Day-to-day operation is two label swaps and a merge button: approve plans at Gate 1 (`plan:pending` → `plan:approved`), release at Gate 2, and pause everything with the `builder:paused` / `triage:paused` labels when you want quiet. The [runbook](docs/runbook.md) covers telemetry, failure modes, and costs; [customizing](docs/customizing.md) covers adapting the pieces to your stack.
+Day-to-day operation is two label swaps and a merge button: approve plans at Gate 1 (`plan:pending` → `plan:approved`), release at Gate 2, and pause everything with the `builder:paused` / `triage:paused` labels when you want quiet. Start with [getting started](docs/getting-started.md) for the first run end to end. The [runbook](docs/runbook.md) covers telemetry, failure modes, and costs; [customizing](docs/customizing.md) covers adapting the pieces to your stack.
 
 ## What's intentionally missing
 

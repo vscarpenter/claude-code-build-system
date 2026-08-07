@@ -1,6 +1,6 @@
 # Runbook
 
-How to operate the pipeline day to day: the gates, the switches, and what to do when something goes sideways.
+How to operate the pipeline day to day: the gates, the switches, and what to do when something goes sideways. If you have not run a change through it yet, start with [getting-started.md](getting-started.md) and come back here.
 
 ## Gate 1: approving plans
 
