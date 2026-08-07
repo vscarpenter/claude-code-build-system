@@ -1,0 +1,41 @@
+name: Hosted builder (reference variant)
+# The local launchd/cron driver is the primary, battle-tested path; this is
+# the hosted equivalent for repos without an always-on machine. Same contract:
+# it runs /build-next, which never merges and obeys .build-system.json.
+#
+# Cost note: every labeled event and scheduled sweep is a Claude run. The
+# local driver's cheap label pre-check does not exist here — GitHub's event
+# filter is the pre-check. Delete the schedule block if label-only suits you.
+on:
+  issues:
+    types: [labeled]
+  schedule:
+    - cron: "0 13 * * 1-5" # optional daily sweep; delete if label-only
+  workflow_dispatch: {}
+
+concurrency:
+  group: hosted-builder
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push the <branchPrefix>/issue-* branch
+  pull-requests: write # open the PR
+  issues: write # move pipeline labels
+  id-token: write
+
+jobs:
+  build-next:
+    if: |
+      github.event_name != 'issues' ||
+      contains(fromJSON('["plan:approved","ready-for-agent","plan:revise"]'), github.event.label.name)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/build-next"
+          claude_args: '--allowed-tools "Bash(git*),Bash(gh*),Edit,Write,Read"'

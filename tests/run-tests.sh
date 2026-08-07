@@ -186,6 +186,15 @@ test_ops_scripts_pass_bash_syntax_check() {
   bash -n "$ROOT/tiers/3-ops/local/triage-run.sh" || fail "triage-run syntax"
 }
 
+test_actions_builder_variant_present_and_wired() {
+  local f="$ROOT/tiers/3-ops/actions/actions-builder.yml"
+  assert_file "$f"
+  assert_grep "$f" 'anthropics/claude-code-action@v1'
+  assert_grep "$f" 'plan:approved'
+  assert_grep "$f" 'CLAUDE_CODE_OAUTH_TOKEN'
+  assert_grep "$f" '/build-next'
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"
