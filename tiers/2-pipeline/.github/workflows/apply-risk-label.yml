@@ -3,7 +3,11 @@ name: Apply risk label
 # Reads the risk dropdown on the issue contract and applies the matching
 # risk:* label. Safe for issues from any author: it only ever applies one of
 # four fixed labels derived from the body, holds no secrets, and executes no
-# issue-supplied content — so no author_association gate is needed.
+# issue-supplied content — so no author_association gate is needed. The label
+# itself is trusted downstream, though: risk:docs and risk:chore auto-approve
+# the builder's plan. Because every textarea in the form renders verbatim, a
+# reporter can write their own "### Risk tier" section, so the parser refuses
+# any body carrying more than one and the issue simply goes unlabeled.
 on:
   issues:
     types: [opened, edited]

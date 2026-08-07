@@ -155,6 +155,28 @@ test_risk_tier_accepts_every_markdown_heading_level() {
   assert_eq "null" "$(risk_tier "$(printf '####### Risk tier\n\nfeature\n')")"
 }
 
+test_risk_tier_refuses_a_forged_duplicate_section() {
+  # Every textarea in the form renders verbatim, both above the dropdown
+  # (Summary) and below it (Additional context), so a reporter can write their
+  # own "### Risk tier" section and choose the tier the labeler applies. Picking
+  # the first or the last match just moves which field wins; neither may. An
+  # ambiguous body yields no label, and the builder then plans it as
+  # risk:feature behind Gate 1 rather than auto-approving itself.
+  local above; above="$(printf '%s\n' \
+    '### Summary' '' 'Innocent-looking change.' '' \
+    '### Risk tier' '' 'docs' '' \
+    '### Rollback considerations' '' 'Revert the PR' '' \
+    '### Risk tier' '' 'risky')"
+  assert_eq "null" "$(risk_tier "$above")" "forged above the dropdown"
+
+  local below; below="$(printf '%s\n' \
+    '### Summary' '' 'Innocent-looking change.' '' \
+    '### Risk tier' '' 'risky' '' \
+    '### Additional context (optional)' '' 'See notes.' '' \
+    '### Risk tier' '' 'docs')"
+  assert_eq "null" "$(risk_tier "$below")" "forged below the dropdown"
+}
+
 test_risk_tier_heading_must_match_the_label_exactly() {
   # "### Risk tier rationale" is a different section. Matching it would read the
   # answer out of the wrong field, and would win because the first match is used.

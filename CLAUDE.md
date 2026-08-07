@@ -65,7 +65,7 @@ A GitHub issue form (`change_request.yml`) forces a contract: acceptance criteri
 
 **Labels are the durable state** — the 15 in `labels.json` are the entire protocol between human and agent. Prose in a comment is invisible to the fleet.
 
-**Two safety invariants govern anything you add to the agent commands:** a fix that does not verify locally is reverted and escalated, and every agent output re-enters the same gates. Nothing in this system merges. Nothing runs `--dangerously-skip-permissions`. Keep it that way — and preserve the fail-safe defaults (a `gh` failure counts as *no work*, ambiguous PR provenance counts as *untrusted*).
+**Two safety invariants govern anything you add to the agent commands:** a fix that does not verify locally is reverted and escalated, and every agent output re-enters the same gates. Nothing in this system merges. Nothing runs `--dangerously-skip-permissions`. Keep it that way — and preserve the fail-safe defaults (a `gh` failure counts as *no work*, ambiguous PR provenance counts as *untrusted*, an ambiguous risk section counts as *no tier*).
 
 ## Constraints that are easy to violate
 

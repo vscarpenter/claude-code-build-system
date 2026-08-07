@@ -36,6 +36,7 @@ Every builder run ends with `OPENED_PR=<n>` or `OPENED_PR=none`. The local drive
 | Worktree in a weird state | an interrupted run | delete it; the driver recreates it from the default branch |
 | Labels missing on a new repo | `gh` was unauthenticated during install | run the printed `MANUAL:` commands |
 | Night shift opens no fix PRs | nothing failing, or every failure needs judgment | read the self-audit report |
+| Issue gets no `risk:*` label | the body carries more than one "Risk tier" section, so the parser refuses to guess | edit the body, or apply the label yourself; an unlabeled issue is planned as `risk:feature` and stops at Gate 1 |
 
 ## Cost notes
 
