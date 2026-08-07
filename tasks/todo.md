@@ -5,8 +5,8 @@
 **Done:** v2 complete on `feat/v2-installable-pipeline`. Tiered source tree, installer with manifest + three-way upgrade, generalized pipeline commands and ops drivers, hosted Actions variant, five docs, README rewrite, 21-test suite green, tier-2 pilot verified against a kanban-todos clone. Blog draft at `~/Projects/VinnyThesis/2026-08-07-the-pipeline-becomes-a-package.md`.
 
 **Next:**
-- [ ] Push branch and open the PR (needs Vinny's go-ahead; no upstream set yet).
-- [ ] After merge: tag `v2.0.0`, set CHANGELOG date.
+- [x] Push branch and open the PR (merged as PR #2, 2026-08-07).
+- [ ] Tag `v2.0.0`, set CHANGELOG date.
 - [ ] Migrate gsd-taskmanager to consume the packaged system (the real generalization test; out of this spec's scope by design).
 - [ ] Run blog-publish-verifier on the draft, then publish.
 - [ ] Retire `~/Projects/AI-Build-System/` (its coding-standards.md now lives in `standards/`).
