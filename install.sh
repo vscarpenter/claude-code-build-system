@@ -138,6 +138,7 @@ do_install() {
   write_manifest "$TIER" "$tmp"
   rm -f "$tmp"
   apply_labels
+  write_ops_env
   note "Installed tier $TIER (v$SYSTEM_VERSION) into $TARGET"
 }
 
@@ -178,6 +179,28 @@ apply_labels() {
       note "MANUAL: gh label create $name --color $color --description \"$desc\" --force"
     fi
   done
+}
+
+# Tier 3's local drivers read machine-local settings from an env file outside
+# the repo. Write a commented template on first tier-3 install; never touch an
+# existing one (it is the human's file).
+write_ops_env() {
+  [ "$TIER" -ge 3 ] 2>/dev/null || return 0
+  local env_file="$HOME/.build-system/$(basename "$TARGET").env"
+  [ -e "$env_file" ] && { note "KEEP: $env_file (exists)"; return 0; }
+  mkdir -p "$(dirname "$env_file")"
+  cat > "$env_file" <<EOF
+# Machine-local settings for the build-system ops drivers (builder-run.sh,
+# triage-run.sh). Sourced as bash. Only BS_REPO is required.
+BS_REPO=""                       # REQUIRED: gh repo slug, e.g. owner/name
+BS_SOURCE="$TARGET"              # local checkout the worktrees hang off
+#BS_DEFAULT_BRANCH="main"
+#BS_WORKTREE=""                  # builder worktree (default ~/.build-system/<repo>/builder-worktree)
+#BS_TRIAGE_WORKTREE=""           # night-shift worktree
+#BS_LOG_DIR=""                   # default <repo>/docs/ops/agent-logs
+#BS_ALLOWED_TOOLS=""             # extra scoped tools for claude -p, comma-separated
+EOF
+  note "WROTE: $env_file (fill in BS_REPO)"
 }
 
 # ---------------------------------------------------------------- upgrade ---

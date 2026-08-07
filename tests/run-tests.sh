@@ -170,6 +170,22 @@ test_corrupt_manifest_fails_fast() {
   if (cd "$ROOT" && ./install.sh --upgrade --target "$t" >/dev/null 2>&1); then fail "should fail on corrupt manifest"; fi
 }
 
+test_tier3_adds_ops_scripts_and_scheduler_artifacts() {
+  local t; t="$(make_target_repo)"; local bin; bin="$(mktemp -d)"; make_gh_mock "$bin"
+  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$(mktemp -d)"
+    cd "$ROOT" && ./install.sh --tier 3 --target "$t" >/dev/null ) || fail "install exited nonzero"
+  assert_file "$t/scripts/build-system/builder-run.sh"
+  assert_file "$t/scripts/build-system/triage-run.sh"
+  assert_file "$t/scripts/build-system/failing-agent-prs.cjs"
+  assert_file "$t/docs/night-shift.md"
+  assert_eq "3" "$(jq -r .tier "$t/.build-system.json")"
+}
+
+test_ops_scripts_pass_bash_syntax_check() {
+  bash -n "$ROOT/tiers/3-ops/local/builder-run.sh" || fail "builder-run syntax"
+  bash -n "$ROOT/tiers/3-ops/local/triage-run.sh" || fail "triage-run syntax"
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"
