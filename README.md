@@ -39,7 +39,7 @@ claude-code-build-system/
 ├── install.sh            The tiered installer (bash + jq, nothing else)
 ├── standards/            Canonical coding-standards.md, versioned, synced by --upgrade
 ├── tiers/
-│   ├── 1-session/        Mirrors your repo: CLAUDE.md, .claude/, tasks/, standards
+│   ├── 1-session/        Mirrors your repo: CLAUDE.md, .claude/, tasks/
 │   ├── 2-pipeline/       Mirrors your repo: .github/, agent commands + labels.json
 │   └── 3-ops/            Drivers, plist templates, night-shift spec, hosted variant
 ├── global/               Goes in ~/.claude/ on your machine (unchanged from v1)

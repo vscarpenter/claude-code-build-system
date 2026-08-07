@@ -27,12 +27,28 @@ run_test() {
 test_harness_self_check() { assert_eq "a" "a"; }
 
 test_tier1_source_tree_complete() {
-  for f in CLAUDE.md coding-standards.md .claude/settings.json \
+  for f in CLAUDE.md .claude/settings.json \
     .claude/commands/qspec.md .claude/commands/tdd.md .claude/commands/qcheck.md \
     .claude/hooks/format-edits.sh .claude/hooks/protect-files.sh \
     tasks/lessons.md tasks/todo.md; do
     assert_file "$ROOT/tiers/1-session/$f"
   done
+}
+
+# coding-standards.md is the one file tier 1 ships from outside its own tree.
+# It used to be duplicated into tiers/1-session/, where the copy could drift
+# from the canonical doc with nothing to catch it. These two tests pin the
+# single-source arrangement that replaced it.
+test_standards_have_exactly_one_copy_in_the_repo() {
+  assert_file "$ROOT/standards/coding-standards.md"
+  assert_eq "" "$(find "$ROOT/tiers" -name coding-standards.md)"
+}
+
+test_tier1_ships_the_canonical_standards_verbatim() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "install exited nonzero"
+  diff -q "$ROOT/standards/coding-standards.md" "$t/coding-standards.md" >/dev/null \
+    || fail "installed coding-standards.md differs from standards/coding-standards.md"
 }
 
 test_tier1_fresh_install_places_files_and_manifest() {
@@ -117,6 +133,7 @@ test_tier2_is_cumulative_and_adds_pipeline_artifacts() {
   ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH"
     cd "$ROOT" && ./install.sh --tier 2 --target "$t" >/dev/null ) || fail "install exited nonzero"
   assert_file "$t/CLAUDE.md"
+  assert_file "$t/coding-standards.md"   # tier 1's out-of-tree file still ships
   assert_file "$t/.github/ISSUE_TEMPLATE/change_request.yml"
   assert_file "$t/.claude/commands/build-next.md"
   assert_file "$t/scripts/parse-risk-tier.cjs"

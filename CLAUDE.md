@@ -11,6 +11,7 @@ The consequence, and the thing to internalize first: **almost everything under `
 - `.github/workflows/ci.yml` is this repo's CI. `tiers/2-pipeline/.github/workflows/*.yml` are payload, and never run here.
 - `tiers/1-session/CLAUDE.md` is a **template for adopters**, not instructions for working in this repo. This file is.
 - `tiers/1-session/.claude/` is payload. This repo has no `.claude/` of its own.
+- `standards/coding-standards.md` is payload too — the one shipped file that lives outside `tiers/`.
 - Payload is prose and config, so most changes are reviewed by reading, not by running. The test suite checks that files exist, install to the right place, and contain the strings other pieces depend on.
 
 Shipped code is bash, jq, and a little Node (`.cjs`). No package manager, no build step, no dependencies beyond `jq`.
@@ -34,10 +35,11 @@ Each test builds a throwaway git repo via `make_target_repo`. `gh` is stubbed wi
 
 `install.sh` is the whole product surface. Three ideas carry it.
 
-**1. Destination is position.** `plan_files()` walks a tier directory and emits `src<TAB>dest` where `dest` is the path *relative to the tier root*, because the tier trees mirror target-repo layout. There is no path table to update — a new shipped file's destination is decided by where you put it under `tiers/`. Four exceptions live in the `case` in `plan_files()`:
+**1. Destination is position.** `plan_files()` walks a tier directory and emits `src<TAB>dest` where `dest` is the path *relative to the tier root*, because the tier trees mirror target-repo layout. There is no path table to update — a new shipped file's destination is decided by where you put it under `tiers/`. Five exceptions: one emitted ahead of the tree walk, four in the `case`.
 
 | Source | Destination | Why |
 |---|---|---|
+| `standards/coding-standards.md` | `coding-standards.md` (tier 1) | the only source outside `tiers/`; keeps one canonical copy |
 | `tiers/2-pipeline/labels.json` | *(not installed)* | installer input — read by `apply_labels()` |
 | `tiers/3-ops/local/*` | `scripts/build-system/*` | drivers live under the target's `scripts/` |
 | `tiers/3-ops/actions/*` | `.github/workflows/*` | the hosted builder variant |
@@ -69,8 +71,8 @@ A GitHub issue form (`change_request.yml`) forces a contract: acceptance criteri
 
 - **Bash 3.2 (macOS default).** No associative arrays, no `${var^^}`. Lookups go through `jq` or temp files.
 - **`test_generalized_artifacts_have_no_gsd_residue`** greps all of `tiers/` for `gsd|cloudfront|taskmanager`. The payload was extracted from a production repo; anything you copy in must be generalized first. The test fails loudly if not.
-- **Two copies of the standards.** `standards/coding-standards.md` is documented as canonical, but `install.sh` never reads it — `plan_files()` ships the byte-identical `tiers/1-session/coding-standards.md`. **Edit both, or the shipped standard silently drifts from the documented one.**
-- **Bumping `VERSION` touches four files:** `VERSION`, the literal `assert_eq "2.0.0"` in `tests/run-tests.sh`, the distribution header in *both* `coding-standards.md` copies, and `CHANGELOG.md`.
+- **The standards ship from outside the tier tree.** `standards/coding-standards.md` is the only copy, emitted directly by `plan_files()` for tier 1; `test_standards_have_exactly_one_copy_in_the_repo` fails if a duplicate reappears under `tiers/`. If you add another out-of-tree source, emit it **before** the tree walk: as a trailing `[ "$1" = N ] && printf`, a false test returns 1 and aborts the install for every other tier under `set -e` + `pipefail`.
+- **Bumping `VERSION` touches four files:** `VERSION`, the literal `assert_eq "2.0.0"` in `tests/run-tests.sh`, the distribution header in `standards/coding-standards.md`, and `CHANGELOG.md`.
 - **Tests that mutate `$ROOT`** (VERSION bumps, upstream-file edits) must restore it before asserting — a failing test otherwise poisons the working tree for every later test. See `test_upgrade_resyncs_unmodified_and_preserves_modified`.
 - **Cross-file vocabulary.** Risk tier names must match in `labels.json`, the `change_request.yml` dropdown, `RISK_TIERS` in `parse-risk-tier.cjs`, and `build-next.md`. Label names are referenced by name across both agent commands, the workflows, and the docs. Renaming is one deliberate pass, not a local edit.
 - **`branchPrefix` is configurable except in one place.** `failing-agent-prs.cjs` hardcodes `claude/` in `isAgentBranch()`, so a target repo using a custom prefix gets a night-shift pre-check that always reports zero work. Touch this only deliberately.

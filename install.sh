@@ -68,7 +68,8 @@ fi
 
 # plan_files <tier>: emit "src<TAB>dest" (dest repo-relative) for one tier.
 # Tier trees mirror the target layout, except tier-root metadata files the
-# installer itself consumes (labels.json) and tier 3's mapped layout.
+# installer itself consumes (labels.json), tier 3's mapped layout, and tier 1's
+# coding-standards.md, which is sourced from the canonical standards/ below.
 plan_files() {
   local tierdir
   case "$1" in
@@ -76,6 +77,14 @@ plan_files() {
     2) tierdir="$ROOT/tiers/2-pipeline" ;;
     3) tierdir="$ROOT/tiers/3-ops" ;;
   esac
+  # Tier 1 stamps the canonical standards, so the repo carries exactly one copy
+  # to edit rather than a tier-tree duplicate that could silently drift. Emitted
+  # ahead of the tree walk on purpose: written as a trailing
+  # `[ "$1" = 1 ] && printf`, a false test returns 1 and aborts the whole
+  # install for tiers 2 and 3 under `set -e` + `pipefail`.
+  if [ "$1" = 1 ]; then
+    printf '%s\t%s\n' "$ROOT/standards/coding-standards.md" "coding-standards.md"
+  fi
   [ -d "$tierdir" ] || return 0
   ( cd "$tierdir" && find . -type f | sed 's|^\./||' | sort ) | while read -r rel; do
     case "$1:$rel" in
