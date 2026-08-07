@@ -43,7 +43,9 @@ claude-code-build-system/
 │   └── 3-ops/
 │       ├── local/            # builder-run.sh, triage-run.sh, launchd plist template
 │       ├── actions/          # actions-builder.yml (hosted variant, reference)
-│       └── night-shift.md    # → .claude/commands/night-shift.md
+│       └── docs/night-shift.md  # durable operating spec → target docs/ (the per-run
+│                                # command is tier 2's triage-prs.md; gsd keeps these
+│                                # as two artifacts and so do we)
 ├── docs/
 │   ├── architecture.md       # three loops, two gates, label state machine (mermaid diagram)
 │   ├── adoption.md           # tier guide: what you get / what you need / how to grow
