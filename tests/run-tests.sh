@@ -202,6 +202,12 @@ test_docs_reference_real_flags_and_paths() {
   assert_grep "$ROOT/docs/adoption.md" 'tier 1'
 }
 
+test_readme_quickstart_commands_are_real() {
+  assert_grep "$ROOT/README.md" 'install\.sh --tier 1'
+  assert_grep "$ROOT/README.md" 'v1 → v2 map'
+  assert_grep "$ROOT/README.md" '\-\-upgrade'
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"

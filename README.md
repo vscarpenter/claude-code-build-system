@@ -1,175 +1,88 @@
 # Claude Code Build System
 
-*A reference configuration for treating Claude Code as a build system, not a chatbot.*
+*The installable version of an issue → Claude → PR delivery pipeline, in three adoption tiers.*
 
-This repo is the companion to [Claude Code Is a Build System, Not a Chatbot](https://vinny.dev/blog/2026-04-25-claude-code-build-system/). It contains the hooks, subagents, slash commands, settings, and templates the post describes. Fork it. Take what's useful. Skip the rest.
+This repo started as the companion to [Claude Code Is a Build System, Not a Chatbot](https://vinny.dev/blog/2026-04-25-claude-code-build-system/): session-level configuration you copied by hand. Version 2 is the whole system. [Two Gates and a Night Shift](https://vinny.dev/blog/2026-07-06-two-gates-and-a-night-shift/) described the pipeline running in production on one repo; this repo makes it installable in yours. Fork it. Take the tier you trust. Grow when you feel the ceiling.
 
-**Last updated:** April 25, 2026
-**Tested on:** macOS, Claude Code v2.1.111+
+**Version:** 2.0.0 (see `VERSION` and `CHANGELOG.md`)
+**Tested on:** macOS and Linux, Claude Code v2.1.111+
 **License:** MIT
 
 ---
+
+## The system in one paragraph
+
+A change enters as a contract: a GitHub issue form that requires acceptance criteria, constraints, rollback, and a risk tier. A builder agent plans it, and the plan waits at **Gate 1** for your approval unless the risk tier is trivial. On approval the agent builds test-first in an isolated worktree, to a written standard, and opens a PR it can never merge. Review and CI gate the PR, and **Gate 2** (the merge) stays human. A night-shift agent clears mechanical CI failures while you sleep, and everything it does re-enters the same gates. Labels are the durable state, and two label kill switches stop the fleet from your phone. The full narrative is in [docs/architecture.md](docs/architecture.md).
+
+## Install
+
+```bash
+git clone https://github.com/vscarpenter/claude-code-build-system
+cd claude-code-build-system
+./install.sh --tier 1 --target /path/to/your/repo
+```
+
+| Tier | What you get | Time |
+|---|---|---|
+| `--tier 1` **Session** | `CLAUDE.md`, `/qspec` `/tdd` `/qcheck`, protective hooks, review subagents, versioned `coding-standards.md` | 15 min |
+| `--tier 2` **Pipeline** | The change-contract issue form, 15-label state machine, risk automation, `@claude` + PR-review workflows, `/build-next`, `/triage-prs` | 30 min |
+| `--tier 3` **Ops** | Scheduled builder + night-shift drivers, worktree isolation, kill switches, hosted Actions variant | 1 hour |
+
+Tiers are cumulative. Add `--dry-run` to preview, `--force` to adopt files you already have. The installer writes a `.build-system.json` manifest recording the version and a hash of every file it manages; `./install.sh --upgrade` later re-syncs what you have not modified and keeps what you have. Details in [docs/adoption.md](docs/adoption.md).
+
+After installing tier 2, fill in the `config` block of `.build-system.json` (verify commands, protected paths, branch prefix). The agents read it at runtime and refuse to run unconfigured.
 
 ## What's in here
 
 ```
 claude-code-build-system/
-├── .claude/              Drop into your project root
-│   ├── settings.json     Team-baseline permissions and project hooks
-│   ├── agents/           Specialist subagents (a11y, migrations)
-│   └── commands/         Slash commands (/qspec, /tdd, /qcheck)
-├── global/               Goes in ~/.claude/ on your machine
-│   ├── settings.json     Personal denylist and allowlist
-│   └── hooks/            Cross-project hooks (audit, capture, memory)
-├── templates/            Starting points you customize per project
-│   ├── CLAUDE.md         Project context loaded every session
-│   ├── coding-standards.md  Skeleton with section headers
-│   ├── lessons.md        Project-specific gotchas
-│   └── todo.md           In-flight work
-├── examples/             Fully-populated reference docs you can adapt
-│   └── coding-standards.md  ~750-line worked example
-└── docs/                 Walkthroughs and rationale
+├── install.sh            The tiered installer (bash + jq, nothing else)
+├── standards/            Canonical coding-standards.md, versioned, synced by --upgrade
+├── tiers/
+│   ├── 1-session/        Mirrors your repo: CLAUDE.md, .claude/, tasks/, standards
+│   ├── 2-pipeline/       Mirrors your repo: .github/, agent commands + labels.json
+│   └── 3-ops/            Drivers, plist templates, night-shift spec, hosted variant
+├── global/               Goes in ~/.claude/ on your machine (unchanged from v1)
+├── docs/                 architecture · adoption · runbook · rationale · customizing
+└── tests/                The installer's test suite (plain bash, runs in CI)
 ```
-
----
-
-## Quickstart: 15 minutes to a working setup
-
-This mirrors the "What changes Monday" section of the post. Five steps, in order.
-
-### 1. Add a CLAUDE.md to your project
-
-```bash
-cp templates/CLAUDE.md /path/to/your/project/CLAUDE.md
-```
-
-Edit it to reflect your stack, conventions, and the gotchas Claude needs to know on every session. Keep it under roughly 200 lines. This single file delivers more value than any other piece of configuration.
-
-### 2. Add a fast typecheck hook
-
-```bash
-mkdir -p /path/to/your/project/.claude
-cp .claude/settings.json /path/to/your/project/.claude/settings.json
-```
-
-Open the file and replace `bun typecheck` with whatever's fast in your stack: `tsc --noEmit`, `mypy`, `cargo check`, `swift build`. The point is to catch the obvious stuff before the conversation ends.
-
-### 3. Add a project lessons file
-
-```bash
-mkdir -p /path/to/your/project/tasks
-cp templates/lessons.md /path/to/your/project/tasks/lessons.md
-cp templates/todo.md /path/to/your/project/tasks/todo.md
-```
-
-Reference `tasks/lessons.md` from your `CLAUDE.md` so Claude reads it at the start of every session. When something bites you twice, add a line.
-
-### 4. Install one slash command
-
-```bash
-mkdir -p /path/to/your/project/.claude/commands
-cp .claude/commands/qcheck.md /path/to/your/project/.claude/commands/qcheck.md
-```
-
-Now `/qcheck` runs a skeptical staff-engineer review of every changed file. Pick the command you'd use weekly. Add the others when you feel their absence.
-
-### 5. Install the audit hook
-
-```bash
-mkdir -p ~/.claude/hooks
-cp global/hooks/audit-command.sh ~/.claude/hooks/audit-command.sh
-chmod +x ~/.claude/hooks/audit-command.sh
-cp global/settings.json ~/.claude/settings.json
-```
-
-Every Bash command Claude proposes now gets logged to `~/.claude/audit/`. Risky shapes (`curl | sh`, `eval`, `git push --force`) get routed to a separate `flagged-` file. You don't need to do anything with the log on day one. You'll be glad it exists the first time something breaks.
-
-That's the minimum viable setup. Add the rest when you feel their absence.
-
----
 
 ## How this maps to the principles
 
-| Principle | What's in the repo |
+| Principle | Where it lives now |
 |---|---|
-| 1. Standards once, referenced everywhere | `templates/CLAUDE.md`, `templates/coding-standards.md`, `examples/coding-standards.md` |
-| 2. Make the right thing automatic | `global/hooks/`, `.claude/settings.json` |
-| 3. Specialists beat generalists | `.claude/agents/` |
-| 4. Rituals deserve commands | `.claude/commands/` |
-| 5. Memory is a feature | `templates/lessons.md`, `templates/todo.md`, `global/hooks/persist-memory.sh` |
-| 6. Permissions are safety equipment | `global/settings.json`, `.claude/settings.json` |
+| 1. Standards once, referenced everywhere | `standards/coding-standards.md` + manifest version stamps |
+| 2. Make the right thing automatic | `global/hooks/`, `tiers/1-session/.claude/settings.json`, the label automation |
+| 3. Specialists beat generalists | `tiers/1-session/.claude/agents/`, the builder and night-shift roles |
+| 4. Rituals deserve commands | `/qspec`, `/tdd`, `/qcheck`, `/build-next`, `/triage-prs` |
+| 5. Memory is a feature | `tasks/lessons.md`, `tasks/todo.md`, `global/hooks/persist-memory.sh` |
+| 6. Permissions are safety equipment | scoped `--allowedTools` in the drivers, hard-limits blocks, `protectedPaths` |
 
-Each directory has its own README walking through the details.
+## v1 → v2 map
 
----
+Readers arriving from the April post: everything survived, most of it moved.
 
-## Per-piece walkthrough
+| v1 path | v2 home |
+|---|---|
+| `templates/CLAUDE.md` | `tiers/1-session/CLAUDE.md` |
+| `templates/lessons.md`, `templates/todo.md` | `tiers/1-session/tasks/` |
+| `templates/coding-standards.md` (skeleton) | `tiers/1-session/docs/coding-standards-skeleton.md` |
+| `examples/coding-standards.md` | superseded by `standards/coding-standards.md` |
+| `.claude/` (project baseline) | `tiers/1-session/.claude/` |
+| `global/` | `global/` (unchanged) |
+| `docs/RATIONALE.md` | `docs/rationale.md`, extended with v2 decisions |
 
-### Global hooks (`global/hooks/`)
+## Operating it
 
-Three shell scripts, all designed to be cheap and deterministic.
-
-- **`audit-command.sh`** fires on `PreToolUse` for Bash. Logs every command. Flags risky shapes to a separate file. Never blocks.
-- **`capture-decision.sh`** fires on `PostToolUse` for Edit and Write. Logs every file mutation with a `git diff --stat` snapshot.
-- **`persist-memory.sh`** fires on `SessionEnd`. Reads the transcript, extracts one to three durable learnings via `claude --print`, appends them to `~/.claude/lessons.md`.
-
-See `global/hooks/README.md` for installation and event registration details.
-
-### Project subagents (`.claude/agents/`)
-
-- **`a11y-reviewer.md`** reviews changed `.tsx` files against WCAG AA. Read-only.
-- **`pg-migration-reviewer.md`** reviews changes under `db/migrations/**` against documented PostgreSQL gotchas. Read-only.
-
-Both run on Sonnet by default. Subagents have their own context window, which keeps the main session focused on the broader feature work.
-
-### Project commands (`.claude/commands/`)
-
-- **`/qspec <feature>`** generates a Spec-Driven Development spec to `tasks/spec.md`, including empty test stubs that map to acceptance criteria.
-- **`/tdd <behavior>`** runs a strict red, green, refactor cycle. Auto-invokes the relevant reviewer subagent based on the files touched.
-- **`/qcheck`** runs a skeptical staff-engineer review of every changed file in the session.
-
-The flow is `/qspec` to think, `/tdd` to build, `/qcheck` to ship.
-
-### Settings (`.claude/settings.json`, `global/settings.json`)
-
-- The **project** `settings.json` defines team-baseline permissions, project hooks (`PreToolUse`, `PostToolUse`, `Stop`), and the agent and command paths.
-- The **global** `settings.json` defines a personal denylist (`rm`, `sudo`, `chmod`, `.env*`, secrets), the allowlist for common dev tools, and the global hook registrations.
-
-You'll also want a `settings.local.json` (gitignored) for personal allowances that don't belong in the team file. There's no example here because it's intentionally yours alone.
-
----
-
-## Two views of `coding-standards.md`
-
-Standards are the highest-leverage piece of this system, so the repo ships two versions:
-
-- **`templates/coding-standards.md`** — a 236-line skeleton. Section headers, a few worked examples, and the *reason matters* framing. Drop it into a new project and fill in the rules.
-- **`examples/coding-standards.md`** — the fully-populated 753-line version I run against my own projects. Read it for the shape of a real standards doc; copy what fits. Do not adopt it verbatim. Your project's rules and reasons are not mine.
-
-The flow: skim the example to see the depth, copy the template into your project, fill it in with rules grounded in *your* incidents and *your* stack.
-
----
+Day-to-day operation is two label swaps and a merge button: approve plans at Gate 1 (`plan:pending` → `plan:approved`), release at Gate 2, and pause everything with the `builder:paused` / `triage:paused` labels when you want quiet. The [runbook](docs/runbook.md) covers telemetry, failure modes, and costs; [customizing](docs/customizing.md) covers adapting the pieces to your stack.
 
 ## What's intentionally missing
 
-Two things you won't find in this repo:
-
-1. **Project-specific `lessons.md` content.** The example file shows the format. Your gotchas come from your projects.
-2. **A `settings.local.json`.** That file is personal, gitignored, and varies by user. Build your own as you go.
-
-The repo gives you the system. The content goes in over time.
-
----
+No npm package, no marketplace plugin, no Windows-native scripts, no telemetry dashboard. The reasoning for each cut is in [docs/rationale.md](docs/rationale.md). Project-specific content (your `lessons.md` entries, your `settings.local.json`) stays yours to write, same as v1.
 
 ## Disclaimer
 
-This is a solo-developer perspective. Team-scale configuration adds governance concerns (subagent ownership, command versioning, shared standards stewardship, audit aggregation) that aren't solved here.
-
-Hooks are bash. Windows users will need WSL or PowerShell equivalents.
-
-The `claude --print` invocation in `persist-memory.sh` makes a nested API call. Budget for it.
-
----
+This is a solo-developer system published for adaptation. Team-scale governance (command ownership, shared standards stewardship, audit aggregation) is not solved here. Hooks and drivers are bash; Windows users need WSL. The agents run under scoped tool allowlists, never `--dangerously-skip-permissions`, and nothing in this system merges a PR. Keep it that way.
 
 ## Contributing
 
@@ -178,9 +91,7 @@ Issues and PRs welcome. Two principles:
 1. Keep examples minimal and well-commented. The repo is a teaching tool, not a kitchen sink.
 2. Match the documentation style. New patterns need a "what it does, why it exists, what it costs" paragraph.
 
-If you're adding a new hook, subagent, or command pattern, include the lifecycle event it registers against and a one-paragraph rationale.
-
----
+Run `bash tests/run-tests.sh` before opening a PR; CI runs the same suite.
 
 ## License
 
