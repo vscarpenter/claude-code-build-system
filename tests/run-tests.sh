@@ -81,6 +81,28 @@ test_non_git_target_fails_fast() {
   assert_no_file "$d/CLAUDE.md"
 }
 
+test_tier2_source_tree_complete() {
+  for f in .github/ISSUE_TEMPLATE/change_request.yml .github/workflows/apply-risk-label.yml \
+    .github/workflows/claude.yml .github/workflows/claude-code-review.yml \
+    scripts/parse-risk-tier.cjs .claude/commands/build-next.md .claude/commands/triage-prs.md; do
+    assert_file "$ROOT/tiers/2-pipeline/$f"
+  done
+  assert_file "$ROOT/tiers/2-pipeline/labels.json"
+  assert_eq "15" "$(jq length "$ROOT/tiers/2-pipeline/labels.json" 2>/dev/null)"
+}
+
+test_generalized_artifacts_have_no_gsd_residue() {
+  local hits; hits="$(grep -riE 'gsd|cloudfront|taskmanager' "$ROOT/tiers/" || true)"
+  assert_eq "" "$hits"
+}
+
+test_build_next_reads_manifest_config() {
+  local f="$ROOT/tiers/2-pipeline/.claude/commands/build-next.md"
+  assert_grep "$f" 'build-system\.json'
+  assert_grep "$f" 'OPENED_PR='
+  assert_grep "$f" 'never merge'
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"

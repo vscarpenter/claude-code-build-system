@@ -1,0 +1,17 @@
+[
+  { "name": "needs-triage",     "color": "c5def5", "description": "Maintainer needs to evaluate this issue" },
+  { "name": "needs-info",       "color": "fef2c0", "description": "Waiting on reporter for more information" },
+  { "name": "ready-for-agent",  "color": "0e8a16", "description": "Fully specified, ready for the builder agent" },
+  { "name": "ready-for-human",  "color": "d93f0b", "description": "Requires human judgment or implementation" },
+  { "name": "wontfix",          "color": "ffffff", "description": "Will not be actioned" },
+  { "name": "plan:pending",     "color": "fbca04", "description": "Plan posted, awaiting human approval (Gate 1)" },
+  { "name": "plan:approved",    "color": "0e8a16", "description": "Plan approved, builder may build" },
+  { "name": "plan:revise",      "color": "d93f0b", "description": "Human requested plan changes via /revise comment" },
+  { "name": "agent:building",   "color": "1d76db", "description": "Builder is implementing this issue now" },
+  { "name": "builder:paused",   "color": "000000", "description": "Kill switch: builder skips all work while set" },
+  { "name": "triage:paused",    "color": "000000", "description": "Kill switch: night shift skips all work while set" },
+  { "name": "risk:docs",        "color": "c2e0c6", "description": "Docs/content only; plan auto-approves" },
+  { "name": "risk:chore",       "color": "bfd4f2", "description": "Deps, config, tooling; no user-facing change; plan auto-approves" },
+  { "name": "risk:feature",     "color": "fbca04", "description": "New or changed user-facing behavior; plan needs approval" },
+  { "name": "risk:risky",       "color": "d93f0b", "description": "Touches security, auth, data, deploy/CI, or migrations; deepest plan, needs approval" }
+]
