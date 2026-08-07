@@ -46,9 +46,9 @@
         "matcher": "",
         "hooks": [
           {
-            "$comment": "Fast last-line typecheck. Replace bun typecheck with whatever is fast in your stack: tsc --noEmit, mypy, cargo check, swift build.",
+            "$comment": "Fast last-line typecheck, shipped inert. Replace `true` with what is fast in your stack: bun typecheck, tsc --noEmit, mypy, cargo check, swift build. Keep a `2>&1 | tail -10` tail so errors do not flood the session end. The slot ships empty on purpose: a command for a toolchain you do not have would run at every session end.",
             "type": "command",
-            "command": "bun typecheck 2>&1 | tail -10",
+            "command": "true",
             "timeout": 60
           }
         ]

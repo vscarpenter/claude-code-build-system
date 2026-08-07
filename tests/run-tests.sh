@@ -37,6 +37,22 @@ test_tier1_source_tree_complete() {
   done
 }
 
+# tiers/1-session/CLAUDE.md ships a filled-in Bun/Prisma example on purpose: a
+# populated template teaches depth, and prose does not execute. settings.json is
+# the opposite case. Claude Code *runs* the Stop hook at the end of every
+# session, so a stack-specific command there fires in repos that have no such
+# toolchain. The slot must ship inert and get filled in per repo.
+test_stop_hook_ships_inert() {
+  local cmd out
+  cmd="$(jq -r '.hooks.Stop[0].hooks[0].command' "$ROOT/tiers/1-session/.claude/settings.json")"
+  out="$(bash -c "$cmd" 2>&1)" || fail "Stop hook exits nonzero out of the box: $cmd"
+  assert_eq "" "$out" "(Stop hook is not silent out of the box)"
+  case "$cmd" in
+    *bun*|*npm*|*pnpm*|*yarn*|*cargo*|*mvn*|*gradle*|*swift*|*pytest*|*mypy*|*tsc*)
+      fail "Stop hook names a specific toolchain: $cmd" ;;
+  esac
+}
+
 # coding-standards.md is the one file tier 1 ships from outside its own tree.
 # It used to be duplicated into tiers/1-session/, where the copy could drift
 # from the canonical doc with nothing to catch it. These two tests pin the
@@ -318,6 +334,21 @@ test_tier3_adds_ops_scripts_and_scheduler_artifacts() {
   assert_file "$t/scripts/build-system/failing-agent-prs.cjs"
   assert_file "$t/docs/night-shift.md"
   assert_eq "3" "$(jq -r .tier "$t/.build-system.json")"
+}
+
+# Modes travel from git through cp, so this pins the source modes. It matters
+# because both documented invocations run the file directly rather than through
+# `bash <script>`: settings.json names the tier-1 hooks by path, and the plist
+# template's Linux fallback is a bare cron line. A non-executable script turns
+# either into a permission error at the least debuggable moment.
+test_installed_shell_scripts_are_executable() {
+  local t; t="$(make_target_repo)"; local bin; bin="$(mktemp -d)"; make_gh_mock "$bin"
+  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$(mktemp -d)"
+    cd "$ROOT" && ./install.sh --tier 3 --target "$t" >/dev/null ) || fail "install exited nonzero"
+  for s in .claude/hooks/protect-files.sh .claude/hooks/format-edits.sh \
+           scripts/build-system/builder-run.sh scripts/build-system/triage-run.sh; do
+    [ -x "$t/$s" ] || fail "$s installed non-executable"
+  done
 }
 
 # Three same-repo PRs with failing checks, differing only in branch prefix: the
