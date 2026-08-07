@@ -138,6 +138,38 @@ test_missing_gh_labels_step_is_nonfatal() {
   echo "$out" | grep -q "MANUAL:" || fail "no manual fallback printed"
 }
 
+# Upgrade tests mutate $ROOT (VERSION bump, one upstream file edit) and MUST
+# restore it before returning, even on assertion failure.
+test_upgrade_resyncs_unmodified_and_preserves_modified() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null)
+  echo "local tweak" >> "$t/CLAUDE.md"                       # local edit → KEEP
+  local up="$ROOT/tiers/1-session/tasks/lessons.md"
+  cp "$up" "$up.bak"; echo "upstream change" >> "$up"        # upstream edit → resync
+  cp "$ROOT/VERSION" "$ROOT/VERSION.bak"; echo "2.0.1" > "$ROOT/VERSION"
+  local out; out="$(cd "$ROOT" && ./install.sh --upgrade --target "$t" 2>&1)" || fail "upgrade exited nonzero"
+  mv "$up.bak" "$up"; mv "$ROOT/VERSION.bak" "$ROOT/VERSION" # restore repo
+  grep -q "local tweak" "$t/CLAUDE.md" || fail "clobbered local edit"
+  echo "$out" | grep -q "KEEP" || fail "no KEEP notice"
+  grep -q "upstream change" "$t/tasks/lessons.md" || fail "did not resync unmodified file"
+  assert_eq "2.0.1" "$(jq -r .systemVersion "$t/.build-system.json")"
+}
+
+test_upgrade_force_overwrites_local_modification() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null)
+  echo "local tweak" >> "$t/CLAUDE.md"
+  (cd "$ROOT" && ./install.sh --upgrade --target "$t" --force >/dev/null) || fail "upgrade exited nonzero"
+  if grep -q "local tweak" "$t/CLAUDE.md"; then fail "force kept local edit"; fi
+}
+
+test_corrupt_manifest_fails_fast() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null)
+  echo "{not json" > "$t/.build-system.json"
+  if (cd "$ROOT" && ./install.sh --upgrade --target "$t" >/dev/null 2>&1); then fail "should fail on corrupt manifest"; fi
+}
+
 main() {
   for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"

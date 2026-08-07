@@ -96,7 +96,7 @@ do_install() {
   local prev_version=""
   if manifest_valid; then
     prev_version="$(manifest_field .systemVersion)"
-    if [ "$prev_version" != "$SYSTEM_VERSION" ]; then
+    if [ "$prev_version" != "$SYSTEM_VERSION" ] && [ "$UPGRADE" = 0 ]; then
       die "target has v$prev_version installed; run ./install.sh --upgrade instead"
     fi
   fi
@@ -109,7 +109,7 @@ do_install() {
       if [ -n "$rec" ]; then
         # Tracked file. Unmodified → refresh (no-op at same version).
         # Locally modified → keep (reinstall never clobbers adaptations).
-        if [ "$(file_hash "$abs")" = "$rec" ]; then action="INSTALL"; else action="KEEP"; fi
+        if [ "$(file_hash "$abs")" = "$rec" ] || [ "$FORCE" = 1 ]; then action="INSTALL"; else action="KEEP"; fi
       elif [ "$FORCE" = 1 ]; then
         action="INSTALL"
       else
@@ -181,9 +181,16 @@ apply_labels() {
 }
 
 # ---------------------------------------------------------------- upgrade ---
+# Upgrade is the install loop with the tier read from the manifest and the
+# version guard lifted: tracked-and-unmodified files re-sync from source,
+# tracked-but-locally-modified files are KEPT (--force overwrites), and the
+# manifest is restamped at the repo's current VERSION.
 do_upgrade() {
   manifest_valid || die "no valid manifest at $MANIFEST — nothing to upgrade (install with --tier N first)"
-  die "--upgrade is not implemented yet"
+  TIER="$(manifest_field .tier)"
+  case "$TIER" in 1|2|3) ;; *) die "manifest has invalid tier '$TIER'" ;; esac
+  note "Upgrading tier $TIER install to v$SYSTEM_VERSION"
+  do_install
 }
 
 if [ "$UPGRADE" = 1 ]; then do_upgrade; else do_install; fi
