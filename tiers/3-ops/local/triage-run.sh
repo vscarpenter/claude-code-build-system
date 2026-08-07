@@ -26,6 +26,19 @@ DEFAULT_BRANCH="${BS_DEFAULT_BRANCH:-main}"
 ALLOWED_TOOLS="${BS_ALLOWED_TOOLS:-Bash(git*),Bash(gh*),Bash(node*),Edit,Write,Read}"
 HELPER="${BS_TRIAGE_HELPER:-$(dirname "$0")/failing-agent-prs.cjs}"
 
+# The fleet's branch prefix is repo config, not machine config, so it comes from
+# the manifest rather than this script's env file. Fall back to the default when
+# jq, the manifest, or the value is missing: a narrow wrong prefix idles the
+# night shift, which is recoverable, while a blank one would match every branch.
+BRANCH_PREFIX="claude"
+if command -v jq >/dev/null 2>&1 && [ -f "$SOURCE/.build-system.json" ]; then
+  from_manifest="$(jq -r '.config.branchPrefix // empty' "$SOURCE/.build-system.json" 2>/dev/null || true)"
+  case "$from_manifest" in
+    ""|REPLACE:*) ;;
+    *) BRANCH_PREFIX="$from_manifest" ;;
+  esac
+fi
+
 MODE="run"
 for arg in "$@"; do
   case "$arg" in
@@ -57,7 +70,8 @@ fi
 # failing-check filtering live in the tested helper). Fetch headRepositoryOwner /
 # isCrossRepository so fork PRs — whose head branch name is attacker-controlled —
 # are told apart from the fleet's own same-repo branches, and pass the base-repo
-# owner so the helper can confirm same-repo provenance.
+# owner plus the configured branch prefix so the helper can confirm same-repo
+# provenance and recognize this repo's fleet branches.
 REPO_OWNER="${REPO%%/*}"
 prs_json='[]'
 if out=$(gh pr list --repo "$REPO" --state open --json number,headRefName,headRepositoryOwner,isCrossRepository,statusCheckRollup 2>/dev/null); then
@@ -65,7 +79,8 @@ if out=$(gh pr list --repo "$REPO" --state open --json number,headRefName,headRe
 else
   gh_fail_log "pr list failed"
 fi
-failing="$(printf '%s' "$prs_json" | BS_TRIAGE_REPO_OWNER="$REPO_OWNER" node "$HELPER" 2>/dev/null || echo 0)"
+failing="$(printf '%s' "$prs_json" \
+  | BS_TRIAGE_REPO_OWNER="$REPO_OWNER" BS_TRIAGE_BRANCH_PREFIX="$BRANCH_PREFIX" node "$HELPER" 2>/dev/null || echo 0)"
 if [ "$failing" = "0" ]; then
   echo "NO_WORK: no failing agent PRs — exiting."
   exit 0

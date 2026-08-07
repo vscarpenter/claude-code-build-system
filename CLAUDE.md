@@ -12,14 +12,14 @@ The consequence, and the thing to internalize first: **almost everything under `
 - `tiers/1-session/CLAUDE.md` is a **template for adopters**, not instructions for working in this repo. This file is.
 - `tiers/1-session/.claude/` is payload. This repo has no `.claude/` of its own.
 - `standards/coding-standards.md` is payload too — the one shipped file that lives outside `tiers/`.
-- Payload is prose and config, so most changes are reviewed by reading, not by running. The test suite checks that files exist, install to the right place, and contain the strings other pieces depend on.
+- Payload is prose and config, so most changes are reviewed by reading, not by running. The test suite checks that files exist, install to the right place, and contain the strings other pieces depend on. The exception is `failing-agent-prs.cjs`, which carries real logic and gets real unit tests.
 
 Shipped code is bash, jq, and a little Node (`.cjs`). No package manager, no build step, no dependencies beyond `jq`.
 
 ## Commands
 
 ```bash
-bash tests/run-tests.sh                      # the whole suite (~6s, 21 tests); CI runs exactly this
+bash tests/run-tests.sh                      # the whole suite; CI runs exactly this. Needs jq and node
 ./install.sh --tier 1 --target /tmp/somerepo # install (tiers cumulative: 2 includes 1)
 ./install.sh --tier 1 --target X --dry-run   # print the plan, write nothing
 ./install.sh --tier 1 --target X --force     # adopt/overwrite files the manifest does not track
@@ -75,7 +75,7 @@ A GitHub issue form (`change_request.yml`) forces a contract: acceptance criteri
 - **Bumping `VERSION` touches four files:** `VERSION`, the literal `assert_eq "2.0.0"` in `tests/run-tests.sh`, the distribution header in `standards/coding-standards.md`, and `CHANGELOG.md`.
 - **Tests that mutate `$ROOT`** (VERSION bumps, upstream-file edits) must restore it before asserting — a failing test otherwise poisons the working tree for every later test. See `test_upgrade_resyncs_unmodified_and_preserves_modified`.
 - **Cross-file vocabulary.** Risk tier names must match in `labels.json`, the `change_request.yml` dropdown, `RISK_TIERS` in `parse-risk-tier.cjs`, and `build-next.md`. Label names are referenced by name across both agent commands, the workflows, and the docs. Renaming is one deliberate pass, not a local edit.
-- **`branchPrefix` is configurable except in one place.** `failing-agent-prs.cjs` hardcodes `claude/` in `isAgentBranch()`, so a target repo using a custom prefix gets a night-shift pre-check that always reports zero work. Touch this only deliberately.
+- **`branchPrefix` resolves at runtime, from the manifest, along three paths.** `/build-next` and `/triage-prs` read `config.branchPrefix` themselves; `triage-run.sh` reads it with `jq` and hands it to `failing-agent-prs.cjs` as `BS_TRIAGE_BRANCH_PREFIX`. Every path falls back to `claude`. A blank prefix must never reach `startsWith("")` — that matches every branch name and would hand the night shift the whole PR queue, human branches included.
 - **Shipped shell scripts need the exec bit in git**, and `chmod` is denied by the permission config. Use `git update-index --chmod=+x <path>`. (`tiers/1-session/.claude/hooks/*.sh` are `100755`; `tiers/3-ops/local/*.sh` are currently `100644`.)
 
 ## Conventions

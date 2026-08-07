@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Test harness for the installer. Plain bash on purpose: the installer's whole
 # pitch is zero runtime dependencies, so its tests get the same constraint.
+# The exception is the night-shift helper, which is a node module and so needs
+# node to exercise; the driver that calls it already hard-depends on node.
 # Each test_* function runs in isolation against a fresh temp git repo fixture.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -196,6 +198,91 @@ test_tier3_adds_ops_scripts_and_scheduler_artifacts() {
   assert_file "$t/scripts/build-system/failing-agent-prs.cjs"
   assert_file "$t/docs/night-shift.md"
   assert_eq "3" "$(jq -r .tier "$t/.build-system.json")"
+}
+
+# Three same-repo PRs with failing checks, differing only in branch prefix: the
+# fleet's default, a renamed fleet, and a hand-written human branch.
+NIGHT_SHIFT_PRS='[
+  {"number":1,"headRefName":"claude/issue-1-a","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
+  {"number":2,"headRefName":"bot/issue-2-b","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
+  {"number":3,"headRefName":"feature/hand-written","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]}
+]'
+
+# Same idea for the driver test, but with two renamed-fleet PRs so the expected
+# count (2) differs from what the old hardcoded-claude/ helper would report (1).
+# A fixture where both answers are 1 would pass with the bug still in place.
+NIGHT_SHIFT_RENAMED_PRS='[
+  {"number":1,"headRefName":"claude/issue-1-a","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
+  {"number":2,"headRefName":"bot/issue-2-b","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
+  {"number":3,"headRefName":"bot/issue-3-c","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]}
+]'
+
+agent_pr_numbers() {  # $1 = branch prefix ("-" omits the argument), $2 = PR JSON
+  node -e '
+    const { failingAgentPRs } = require(process.argv[1]);
+    const prefix = process.argv[2] === "-" ? undefined : process.argv[2];
+    process.stdout.write(
+      failingAgentPRs(JSON.parse(process.argv[3]), "acme", prefix).map((p) => p.number).join(",")
+    );
+  ' "$ROOT/tiers/3-ops/local/failing-agent-prs.cjs" "$1" "$2"
+}
+
+test_night_shift_helper_defaults_to_the_claude_prefix() {
+  assert_eq "1" "$(agent_pr_numbers - "$NIGHT_SHIFT_PRS")"
+}
+
+test_night_shift_helper_honors_a_custom_branch_prefix() {
+  assert_eq "2" "$(agent_pr_numbers bot "$NIGHT_SHIFT_PRS")"
+}
+
+test_branch_prefix_tolerates_a_hand_written_trailing_slash() {
+  # config.branchPrefix is hand-edited JSON; "bot/" is a plausible entry and
+  # must not become "bot//".
+  assert_eq "2" "$(agent_pr_numbers "bot/" "$NIGHT_SHIFT_PRS")"
+}
+
+test_blank_branch_prefix_does_not_match_every_pr() {
+  # A "" prefix must never reach startsWith(""), which is true for every branch
+  # name and would hand the night shift every failing PR in the repo — including
+  # hand-written human ones. Fail safe to the default instead.
+  assert_eq "1" "$(agent_pr_numbers "" "$NIGHT_SHIFT_PRS")"
+}
+
+make_gh_pr_mock() {  # $1 = bin dir, $2 = PR list JSON; issue list answers the kill switch
+  cat > "$1/gh" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  *"issue list"*) echo 0 ;;
+  *"pr list"*) cat <<'JSON'
+$2
+JSON
+    ;;
+  *) exit 0 ;;
+esac
+EOF
+  chmod +x "$1/gh" 2>/dev/null || /bin/chmod +x "$1/gh"
+}
+
+# The regression that motivated threading the prefix: the helper hardcoded
+# claude/, so a repo that renamed branchPrefix got a night shift that reported
+# no work forever. Exercises the whole wiring — manifest to driver to helper.
+test_triage_driver_passes_manifest_branch_prefix_to_the_helper() {
+  local t; t="$(make_target_repo)"
+  local bin; bin="$(mktemp -d)"; local home; home="$(mktemp -d)"
+  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$home"
+    make_gh_mock "$bin"
+    cd "$ROOT" && ./install.sh --tier 3 --target "$t" >/dev/null ) || fail "install exited nonzero"
+
+  jq '.config.branchPrefix = "bot"' "$t/.build-system.json" > "$t/.m" && mv "$t/.m" "$t/.build-system.json"
+  mkdir -p "$home/.build-system"
+  printf 'BS_REPO="acme/widget"\n' > "$home/.build-system/$(basename "$t").env"
+  make_gh_pr_mock "$bin" "$NIGHT_SHIFT_RENAMED_PRS"
+
+  local out
+  out="$( export PATH="$bin:$PATH" HOME="$home"
+    bash "$t/scripts/build-system/triage-run.sh" --check 2>&1 )"
+  echo "$out" | grep -q "WORK: failing agent PRs=2" \
+    || fail "driver did not use the manifest prefix (got: $out)"
 }
 
 test_ops_scripts_pass_bash_syntax_check() {

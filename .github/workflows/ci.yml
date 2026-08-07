@@ -8,4 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y jq
+      # The night-shift helper is a node module, so its unit tests need node.
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
       - run: bash tests/run-tests.sh
