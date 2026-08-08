@@ -1,9 +1,16 @@
 ---
+name: qspec
 description: Generate a Spec-Driven Development spec to tasks/spec.md, including empty test stubs that map to each acceptance criterion.
 argument-hint: <feature description>
 ---
 
-Generate a Spec-Driven Development spec for the following feature: $ARGUMENTS
+Generate a Spec-Driven Development spec for the feature described by the
+user's current request. In Claude slash-command mode, the supplied arguments
+are: $ARGUMENTS
+
+If `$ARGUMENTS` appears literally instead of being substituted, ignore that
+marker and use the user's request. This keeps the same source usable as an
+Agent Skill in harnesses that do not implement Claude's argument substitution.
 
 Write the spec to `tasks/spec.md`. Do not write any implementation code. Do not write filled test bodies. The empty test stubs are the magic. They make the spec executable, not just descriptive.
 

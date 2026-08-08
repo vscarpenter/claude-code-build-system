@@ -1,56 +1,97 @@
 # Architecture
 
-The system turns a GitHub issue into a merged PR through a pipeline with two human gates. An agent does the labor. You keep the judgment calls: which plans proceed, and which releases ship.
+Version 3 is a deterministic control plane around bounded AI workers. GitHub carries the contract and durable lifecycle. Git refs provide the cross-runner lease. The controller owns policy and delivery. Harnesses only plan or edit inside a disposable worktree.
 
-## The pipeline
+## Authority map
 
-1. **A change enters as a contract.** The issue form (`change_request.yml`) requires a summary, acceptance criteria, constraints, out-of-scope list, rollback considerations, and a risk tier. A vague contract produces a plausible plan for the wrong problem, so the form refuses vagueness up front.
-2. **Automation applies the risk label.** `apply-risk-label.yml` parses the risk dropdown and applies one of four `risk:*` labels. The tier drives plan depth and whether the builder stops for approval.
-3. **The builder plans.** `/build-next` claims the oldest `ready-for-agent` issue and writes a plan scaled to risk. Docs and chore work auto-approves. Feature and risky work stops at **Gate 1**: the plan waits as `plan:pending` until you approve it or request changes with a `/revise` comment.
-4. **The builder builds.** On `plan:approved`, it works in an isolated worktree, on its own branch, test-first, to the standard defined in `coding-standards.md`. It runs every command in `config.verifyCommands` and opens a PR. It never merges.
-5. **Review and CI gate the PR.** The reviewer workflow and your required checks run. **Gate 2** is release approval: you merge when the work is verified and the rollback path is real. No rollback path means no approval.
-6. **The night shift keeps the queue clean.** Nightly, `/triage-prs` reproduces failing checks on the fleet's own PRs, fixes mechanical failures as fix PRs, escalates judgment calls, and files a self-audit report. It never merges either.
+| Layer | Owns | Must never own |
+|---|---|---|
+| Human + GitHub | contract, Gate 1 approval, CI, Gate 2 merge | model execution policy |
+| Controller | selection, lease, digests, worktree, policy, verification, Git/PR/labels, evidence | product judgment |
+| Harness adapter | invoke provider, normalize strict `AgentResult` | GitHub token, Git delivery, authoritative outcome |
+| Claude/Codex worker | plan text or ordinary file edits | labels, branch, commit, push, PR, proof |
 
-Labels are the durable state. Every scheduled wake-up reads them cheaply and exits without spending a Claude token when there is no work.
+This split is the main safety boundary. Provider output is a proposal. Success is derived from controller observations: real diffs, command exits, remote SHAs, GitHub PR fields, and label postconditions.
 
-## The label state machine
+## End-to-end flow
+
+```mermaid
+flowchart LR
+    H["Human writes contract"] --> R["Risk label"]
+    R --> C["Controller selects + leases"]
+    C --> P["Bounded worker plans"]
+    P --> G1{"Gate 1 digest approval"}
+    G1 -->|revise| P
+    G1 -->|approved| W["Per-run worktree"]
+    W --> A["Claude or Codex edits"]
+    A --> D["Controller audits diff"]
+    D --> V["Controller verifies"]
+    V --> B{"Gate 2 rules enforceable?"}
+    B -->|no or unknown| X["Stop + human"]
+    B -->|yes| PR["Controller commit → push → PR"]
+    PR --> E["Evidence + provenance"]
+    E --> H2["Human review + merge"]
+```
+
+## Lifecycle
+
+Every issue must carry exactly one lifecycle label. Risk and pause labels are orthogonal metadata.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> needs_triage: issue filed via contract form
-    needs_triage --> needs_info: contract incomplete
-    needs_info --> needs_triage: reporter answers
-    needs_triage --> ready_for_agent: you triage it in
+    [*] --> needs_triage
+    needs_triage --> needs_info
+    needs_info --> needs_triage
+    needs_triage --> ready_for_agent
     needs_triage --> wontfix
-    ready_for_agent --> plan_pending: builder posts plan (feature/risky)
-    ready_for_agent --> agent_building: docs/chore plan auto-approves
-    plan_pending --> plan_approved: Gate 1 you approve
-    plan_pending --> plan_revise: you comment /revise
-    plan_revise --> plan_pending: builder re-plans
-    plan_approved --> agent_building: builder claims
-    agent_building --> [*]: PR opened, Gate 2 is human
-    needs_triage --> ready_for_human: needs human hands
-    agent_building --> ready_for_human: builder escalates
+    ready_for_agent --> plan_pending: controller posts plan
+    ready_for_agent --> plan_approved: docs/chore auto-policy
+    plan_pending --> plan_approved: Gate 1 approval
+    plan_pending --> plan_revise
+    plan_revise --> plan_pending
+    plan_approved --> agent_claimed: remote lease acquired
+    agent_retryable --> agent_claimed: retry with new run
+    agent_claimed --> agent_building
+    agent_building --> agent_verifying
+    agent_verifying --> pr_open: exact delivery proven
+    agent_claimed --> agent_retryable: safe failure
+    agent_building --> agent_retryable: safe failure
+    agent_verifying --> agent_retryable: safe failure
+    pr_open --> done: merged PR reconciled
+    pr_open --> ready_for_human: provenance drift
+    agent_claimed --> ready_for_human
+    agent_building --> ready_for_human
+    agent_verifying --> ready_for_human
 ```
 
-The `risk:*` labels ride alongside this lifecycle, and two kill-switch labels sit outside it: `builder:paused` and `triage:paused` stop their loops with no code change and no shell access.
+Labels make state visible and schedulable, but a label alone is not a lock. The controller acquires `refs/heads/<prefix>/leases/issue-N` with a unique lease commit. The first non-force push wins. Expiry takeover uses `--force-with-lease` against the observed old SHA, and release is a compare-and-swap delete. A stale worker cannot silently replace a newer lease.
 
-## The two safety invariants
+## Bound work
 
-The night shift's broad auto-fix mandate is safe because both of these hold:
+Planning produces a canonical `WorkContract` digest and a `planDigest`. Approval records both. Building re-reads the issue and rejects approval if contract bytes changed. The `WorkOrder` also binds repository identity, issue number, base SHA, run ID, worktree, allowed paths, protected paths, verification commands, and lease fence.
 
-1. **Verify before submit.** A fix that does not make the failing check pass locally is reverted and escalated. A plausible-but-wrong fix never leaves the machine.
-2. **Fixes re-enter the gate.** Every fix is a PR facing the same review and CI as daytime work. Nothing reaches a branch without gate sign-off.
+The adapter receives that bounded order and returns one strict `AgentResult`. Unknown fields are rejected. A worker cannot add `openedPr`, claim a label transition, or author controller identifiers. Missing usage remains unknown instead of becoming zero.
 
-The builder's version of the same idea is the hard-limits block in `/build-next`: never merge, never push to the default branch, never touch workflows, deploy config, or `protectedPaths`.
+## Split-privilege delivery
 
-## Where each piece runs
+Claude is invoked with Read/Edit/Write/Glob/Grep only. Codex runs with `workspace-write`, no network, no approval prompts, and no GitHub environment credentials. Both are told not to run Git, but policy does not depend on that instruction: the controller checks that branch and HEAD are unchanged, enumerates the real diff, rejects protected paths and unsafe file modes, and independently runs verification.
 
-| Piece | Runs | Trigger |
-|---|---|---|
-| Risk labeling | GitHub Actions | issue opened or edited |
-| `@claude` responder, PR reviewer | GitHub Actions | mentions, PR events |
-| Builder | your machine (launchd/cron), or the hosted variant | schedule or pipeline labels |
-| Night shift | your machine (launchd/cron) | nightly schedule |
+Only after those checks—and a second pause check—does the controller verify Gate 2 branch protection, commit, push a new remote branch, open the PR, and query GitHub to confirm exact head branch, head SHA, and base branch. Any mismatch fails closed.
 
-The local drivers are the battle-tested path. Their pre-checks make idle wake-ups free, and your machine already has your credentials, your toolchain, and your worktrees. The hosted variant (`actions-builder.yml`) trades that control for zero infrastructure.
+## Evidence and recovery
+
+Each run has a private directory outside the repository containing the work order, bounded prompt, raw provider events, normalized result, verification artifacts, and a hash-chained evidence stream. Successful delivery adds a provenance record keyed by PR number with exact repository, branch, and head SHA.
+
+`reconcile` is read-only by default. With `--apply`, it CAS-deletes expired leases, moves stranded active work to `agent:retryable`, marks exactly matched merged deliveries `done`, and moves provenance drift to `ready-for-human`. It never reconstructs success from model prose.
+
+## Night shift
+
+The old night shift handed a model Git/GitHub tools to repair failing PRs. Version 3 removes that authority. `triage` now performs deterministic diagnosis only: it selects same-repository PRs with failing checks and reports them only when repository, PR number, branch, and head SHA match controller evidence. An operator then chooses whether to retry through the normal contract or take the work by hand.
+
+## Gate 2 limitations
+
+`doctor` reads classic branch protection and requires PR reviews, admin enforcement, no force-push/deletion, and every configured required check. GitHub rulesets, bypass actors, enterprise variants, and effective permissions can be more complex than one endpoint exposes. Therefore `doctor=READY` is necessary, not sufficient: release requires a live sandbox proof using the exact automation identity.
+
+## Trust zones
+
+Untrusted issue text and repository content cross into the worker. Maintainer labels and approval markers cross into the controller. GitHub credentials exist only in the controller process. Because a local worker still runs under the same OS account, strong isolation requires a container or disposable VM; tool flags are capability reduction, not a kernel boundary.

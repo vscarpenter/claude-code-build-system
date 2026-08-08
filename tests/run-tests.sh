@@ -28,8 +28,12 @@ run_test() {
 
 test_harness_self_check() { assert_eq "a" "a"; }
 
+test_controller_node_suite() {
+  node "$ROOT/tests/controller-tests.cjs" || fail "deterministic controller suite failed"
+}
+
 test_tier1_source_tree_complete() {
-  for f in CLAUDE.md .claude/settings.json \
+  for f in CLAUDE.md AGENTS.md .claude/settings.json \
     .claude/commands/qspec.md .claude/commands/tdd.md .claude/commands/qcheck.md \
     .claude/hooks/format-edits.sh .claude/hooks/protect-files.sh \
     tasks/lessons.md tasks/todo.md; do
@@ -72,9 +76,10 @@ test_tier1_ships_the_canonical_standards_verbatim() {
 test_tier1_fresh_install_places_files_and_manifest() {
   local t; t="$(make_target_repo)"
   (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "install exited nonzero"
-  for f in CLAUDE.md coding-standards.md .claude/settings.json tasks/lessons.md; do assert_file "$t/$f"; done
+  for f in AGENTS.md CLAUDE.md coding-standards.md .claude/settings.json \
+    .agents/skills/qspec/SKILL.md tasks/lessons.md; do assert_file "$t/$f"; done
   assert_file "$t/.build-system.json"
-  assert_eq "2.0.0" "$(jq -r .systemVersion "$t/.build-system.json")"
+  assert_eq "$(cat "$ROOT/VERSION")" "$(jq -r .systemVersion "$t/.build-system.json")"
   assert_eq "1" "$(jq -r .tier "$t/.build-system.json")"
   local h; h="$(jq -r '.files[]|select(.path=="CLAUDE.md").sha256' "$t/.build-system.json")"
   assert_eq "$h" "$(shasum -a 256 "$t/CLAUDE.md" | awk '{print $1}')"
@@ -87,6 +92,20 @@ test_reinstall_same_version_is_noop() {
   (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "second run exited nonzero"
   local after; after="$(cd "$t" && find . -type f -not -path './.git/*' -exec shasum -a 256 {} + | sort | shasum)"
   assert_eq "$before" "$after"
+}
+
+test_local_modification_is_kept_across_repeated_reinstalls() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "install exited nonzero"
+  echo "LOCAL_SENTINEL" >> "$t/CLAUDE.md"
+
+  local first second
+  first="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1)" || fail "first reinstall exited nonzero"
+  second="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1)" || fail "second reinstall exited nonzero"
+
+  echo "$first" | grep -q "KEEP: CLAUDE.md" || fail "first reinstall did not keep local edit"
+  echo "$second" | grep -q "KEEP: CLAUDE.md" || fail "second reinstall lost the original baseline"
+  grep -q "LOCAL_SENTINEL" "$t/CLAUDE.md" || fail "repeated reinstall clobbered local edit"
 }
 
 test_existing_untracked_claude_md_is_skipped_with_warning() {
@@ -134,7 +153,7 @@ test_next_steps_are_tier_specific() {
   [ -n "$out" ] || fail "tier 2 printed no next steps"
   echo "$out" | grep -q "\.build-system\.json" || fail "tier 2 omits the config step"
   echo "$out" | grep -q "ready-for-agent" || fail "tier 2 omits the triage step"
-  echo "$out" | grep -q "/build-next" || fail "tier 2 omits how to run the builder"
+  echo "$out" | grep -q "scripts/build-system.cjs run" || fail "tier 2 omits how to run the controller"
   return 0
 }
 
@@ -146,8 +165,8 @@ test_tier3_next_steps_cover_the_scheduler_handoff() {
   local out; out="$( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$(mktemp -d)"
                      cd "$ROOT" && ./install.sh --tier 3 --target "$t" 2>&1 | next_steps_block )"
   [ -n "$out" ] || fail "tier 3 printed no next steps"
-  echo "$out" | grep -q "BS_REPO" || fail "tier 3 omits the env-file step"
-  echo "$out" | grep -q "builder-run.sh --check" || fail "tier 3 omits the dry-check"
+  echo "$out" | grep -q "RUNTIME CONFIG" || fail "tier 3 omits the JSON runtime config"
+  echo "$out" | grep -q "builder-run.sh --config" || fail "tier 3 omits the immutable dry-check"
   echo "$out" | grep -qi "launchctl\|cron" || fail "tier 3 omits loading the scheduler"
   echo "$out" | grep -q "Night Shift Control" || fail "tier 3 omits the control issue"
 }
@@ -177,14 +196,89 @@ test_non_git_target_fails_fast() {
   assert_no_file "$d/CLAUDE.md"
 }
 
+test_git_subdirectory_is_rejected_as_target() {
+  local t; t="$(make_target_repo)"; mkdir -p "$t/nested"
+  local out
+  if out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t/nested" 2>&1)"; then
+    fail "install into a git subdirectory unexpectedly succeeded"
+  fi
+  echo "$out" | grep -q "repository root" || fail "subdirectory error does not identify the required root"
+  assert_no_file "$t/nested/.build-system.json"
+}
+
+test_missing_flag_value_has_an_actionable_error() {
+  local out
+  if out="$(cd "$ROOT" && ./install.sh --target 2>&1)"; then fail "missing --target value succeeded"; fi
+  echo "$out" | grep -q -- "--target requires a value" || fail "missing value error is unclear"
+}
+
+test_symlinked_destination_parent_is_rejected_before_writes() {
+  local t outside out; t="$(make_target_repo)"; outside="$(mktemp -d)"
+  ln -s "$outside" "$t/.claude"
+  if out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1)"; then
+    fail "install through a symlinked destination parent succeeded"
+  fi
+  echo "$out" | grep -q "symlinked destination parent" || fail "symlink rejection is unclear"
+  assert_no_file "$outside/settings.json"
+  assert_no_file "$t/CLAUDE.md"
+  assert_no_file "$t/.build-system.json"
+}
+
+test_preflight_collision_leaves_no_partial_install() {
+  local t out; t="$(make_target_repo)"; printf 'collision\n' > "$t/tasks"
+  if out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1)"; then
+    fail "install with a non-directory parent unexpectedly succeeded"
+  fi
+  echo "$out" | grep -q "destination parent is not a directory" || fail "collision error is unclear"
+  assert_no_file "$t/CLAUDE.md"
+  assert_no_file "$t/.build-system.json"
+}
+
+test_copy_failure_rolls_back_target_and_manifest() {
+  local t bin out
+  t="$(make_target_repo)"; bin="$(mktemp -d)"
+  cat > "$bin/cp" <<'EOF'
+#!/usr/bin/env bash
+last=""
+for arg in "$@"; do last="$arg"; done
+if [ "$last" = "${FAIL_TARGET:?}/.claude/settings.json" ]; then exit 42; fi
+exec /bin/cp "$@"
+EOF
+  chmod +x "$bin/cp"
+  local canonical_t; canonical_t="$(cd "$t" && pwd -P)"
+  if out="$(export FAIL_TARGET="$canonical_t" PATH="$bin:$PATH"; cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1)"; then
+    fail "installer succeeded after injected copy failure"
+  fi
+  assert_no_file "$t/CLAUDE.md"
+  assert_no_file "$t/.claude/settings.json"
+  assert_no_file "$t/.build-system.json"
+}
+
+test_incomplete_distribution_fails_before_target_writes() {
+  local t dist_parent dist out
+  t="$(make_target_repo)"
+  dist_parent="$(mktemp -d)"; dist="$dist_parent/distribution"
+  cp -R "$ROOT" "$dist"
+  rm "$dist/tiers/1-session/.claude/commands/qspec.md"
+  if out="$(cd "$dist" && ./install.sh --tier 1 --target "$t" 2>&1)"; then
+    fail "install from an incomplete distribution unexpectedly succeeded"
+  fi
+  echo "$out" | grep -q "distribution is incomplete" || fail "missing-payload error is unclear"
+  assert_no_file "$t/CLAUDE.md"
+  assert_no_file "$t/.build-system.json"
+}
+
 test_tier2_source_tree_complete() {
   for f in .github/ISSUE_TEMPLATE/change_request.yml .github/workflows/apply-risk-label.yml \
     .github/workflows/claude.yml .github/workflows/claude-code-review.yml \
-    scripts/parse-risk-tier.cjs .claude/commands/build-next.md .claude/commands/triage-prs.md; do
+    scripts/parse-risk-tier.cjs scripts/build-system.cjs scripts/lib/protocol.cjs \
+    scripts/lib/policy.cjs scripts/lib/workspace.cjs scripts/lib/adapters.cjs \
+    scripts/lib/github.cjs scripts/lib/evidence.cjs scripts/lib/system.cjs \
+    scripts/schemas/agent-result.schema.json .claude/commands/build-next.md .claude/commands/triage-prs.md; do
     assert_file "$ROOT/tiers/2-pipeline/$f"
   done
   assert_file "$ROOT/tiers/2-pipeline/labels.json"
-  assert_eq "15" "$(jq length "$ROOT/tiers/2-pipeline/labels.json" 2>/dev/null)"
+  assert_eq "19" "$(jq length "$ROOT/tiers/2-pipeline/labels.json" 2>/dev/null)"
 }
 
 test_generalized_artifacts_have_no_gsd_residue() {
@@ -195,8 +289,8 @@ test_generalized_artifacts_have_no_gsd_residue() {
 test_build_next_reads_manifest_config() {
   local f="$ROOT/tiers/2-pipeline/.claude/commands/build-next.md"
   assert_grep "$f" 'build-system\.json'
-  assert_grep "$f" 'OPENED_PR='
-  assert_grep "$f" 'never merge'
+  assert_grep "$f" 'scripts/build-system\.cjs run'
+  assert_grep "$f" 'controller alone claims'
 }
 
 RISK_PARSER="$ROOT/tiers/2-pipeline/scripts/parse-risk-tier.cjs"
@@ -336,11 +430,24 @@ test_tier2_is_cumulative_and_adds_pipeline_artifacts() {
   assert_file "$t/coding-standards.md"   # tier 1's out-of-tree file still ships
   assert_file "$t/.github/ISSUE_TEMPLATE/change_request.yml"
   assert_file "$t/.claude/commands/build-next.md"
+  assert_file "$t/.agents/skills/build-next/SKILL.md"
   assert_file "$t/scripts/parse-risk-tier.cjs"
   assert_no_file "$t/labels.json"
   assert_eq "2" "$(jq -r .tier "$t/.build-system.json")"
   grep -q "label create ready-for-agent" "$bin/log" || fail "labels not applied"
-  assert_eq "15" "$(grep -c "label create" "$bin/log")"
+  assert_eq "19" "$(grep -c "label create" "$bin/log")"
+}
+
+test_portable_skills_are_generated_from_claude_command_sources() {
+  local t; t="$(make_target_repo)"; local bin; bin="$(mktemp -d)"; make_gh_mock "$bin"
+  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH"
+    cd "$ROOT" && ./install.sh --tier 2 --target "$t" >/dev/null ) || fail "install exited nonzero"
+  local name
+  for name in qspec tdd qcheck build-next triage-prs; do
+    diff -q "$t/.claude/commands/$name.md" "$t/.agents/skills/$name/SKILL.md" >/dev/null \
+      || fail "$name differs between Claude command and portable Agent Skill"
+    assert_grep "$t/.agents/skills/$name/SKILL.md" "^name: $name$"
+  done
 }
 
 test_missing_gh_labels_step_is_nonfatal() {
@@ -355,17 +462,18 @@ test_missing_gh_labels_step_is_nonfatal() {
   echo "$out" | grep -q "MANUAL:" || fail "no manual fallback printed"
 }
 
-# Upgrade tests mutate $ROOT (VERSION bump, one upstream file edit) and MUST
-# restore it before returning, even on assertion failure.
+# Upgrade tests mutate a private copy of the distribution. Never mutate $ROOT:
+# test processes and parallel reviewers may share this checkout.
 test_upgrade_resyncs_unmodified_and_preserves_modified() {
-  local t; t="$(make_target_repo)"
-  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null)
+  local t dist_parent dist
+  t="$(make_target_repo)"
+  dist_parent="$(mktemp -d)"; dist="$dist_parent/distribution"
+  cp -R "$ROOT" "$dist"
+  (cd "$dist" && ./install.sh --tier 1 --target "$t" >/dev/null)
   echo "local tweak" >> "$t/CLAUDE.md"                       # local edit → KEEP
-  local up="$ROOT/tiers/1-session/tasks/lessons.md"
-  cp "$up" "$up.bak"; echo "upstream change" >> "$up"        # upstream edit → resync
-  cp "$ROOT/VERSION" "$ROOT/VERSION.bak"; echo "2.0.1" > "$ROOT/VERSION"
-  local out; out="$(cd "$ROOT" && ./install.sh --upgrade --target "$t" 2>&1)" || fail "upgrade exited nonzero"
-  mv "$up.bak" "$up"; mv "$ROOT/VERSION.bak" "$ROOT/VERSION" # restore repo
+  echo "upstream change" >> "$dist/tiers/1-session/tasks/lessons.md"
+  echo "2.0.1" > "$dist/VERSION"
+  local out; out="$(cd "$dist" && ./install.sh --upgrade --target "$t" 2>&1)" || fail "upgrade exited nonzero"
   grep -q "local tweak" "$t/CLAUDE.md" || fail "clobbered local edit"
   echo "$out" | grep -q "KEEP" || fail "no KEEP notice"
   grep -q "upstream change" "$t/tasks/lessons.md" || fail "did not resync unmodified file"
@@ -393,9 +501,65 @@ test_tier3_adds_ops_scripts_and_scheduler_artifacts() {
     cd "$ROOT" && ./install.sh --tier 3 --target "$t" >/dev/null ) || fail "install exited nonzero"
   assert_file "$t/scripts/build-system/builder-run.sh"
   assert_file "$t/scripts/build-system/triage-run.sh"
-  assert_file "$t/scripts/build-system/failing-agent-prs.cjs"
   assert_file "$t/docs/night-shift.md"
   assert_eq "3" "$(jq -r .tier "$t/.build-system.json")"
+}
+
+test_existing_install_cannot_be_silently_downgraded() {
+  local t; t="$(make_target_repo)"; local bin; bin="$(mktemp -d)"; make_gh_mock "$bin"
+  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$(mktemp -d)"
+    cd "$ROOT" && ./install.sh --tier 3 --target "$t" >/dev/null ) || fail "tier 3 install exited nonzero"
+
+  local out
+  if out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1)"; then
+    fail "tier downgrade unexpectedly succeeded"
+  fi
+  echo "$out" | grep -q "refusing to downgrade" || fail "tier downgrade error is unclear"
+  assert_eq "3" "$(jq -r .tier "$t/.build-system.json")" "manifest tier changed after rejected downgrade"
+  jq -e '.files[] | select(.path=="scripts/build-system/builder-run.sh")' \
+    "$t/.build-system.json" >/dev/null || fail "tier 3 managed files fell out of the manifest"
+}
+
+test_ops_runtime_uses_non_executable_json_and_unique_identity() {
+  local parent t canonical_t marker bin home_dir
+  parent="$(mktemp -d)"; marker="$parent/PWNED"
+  t="$parent/repo\$(touch PWNED)"; mkdir -p "$t"; git -C "$t" init -q
+  git -C "$t" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+  canonical_t="$(cd "$t" && pwd -P)"
+  bin="$(mktemp -d)"; make_gh_mock "$bin"; home_dir="$(mktemp -d)"
+  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$home_dir"
+    cd "$ROOT" && ./install.sh --tier 3 --target "$t" >/dev/null ) || fail "tier 3 install exited nonzero"
+
+  local env_file source_value
+  env_file="$(find "$home_dir/.build-system/repos" -name config.json -type f | head -1)"
+  assert_file "$env_file"
+  source_value="$(jq -r .source "$env_file")" || fail "generated JSON config could not be read"
+  assert_eq "$canonical_t" "$source_value" "generated env changed the target path"
+  assert_no_file "$marker"
+  local env_mode
+  if [ "$(uname -s)" = "Darwin" ]; then
+    env_mode="$(/usr/bin/stat -f '%Lp' "$env_file")"
+  else
+    env_mode="$(stat -c '%a' "$env_file")"
+  fi
+  assert_eq "600" "$env_mode" "config mode"
+  local runtime; runtime="$(jq -r .runtime "$env_file")"
+  assert_file "$runtime/runtime-manifest.json"
+  assert_file "$runtime/builder-run.sh"
+  assert_file "$runtime/triage-run.sh"
+  assert_file "$runtime/build-system.cjs"
+  echo "tamper" >> "$runtime/lib/protocol.cjs"
+  if HOME="$home_dir" "$runtime/builder-run.sh" --config "$env_file" --check >/dev/null 2>&1; then
+    fail "immutable runtime executed after a hash mismatch"
+  fi
+}
+
+test_upgrade_repairs_executable_mode_drift() {
+  local t; t="$(make_target_repo)"
+  (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "install exited nonzero"
+  chmod -x "$t/.claude/hooks/protect-files.sh"
+  (cd "$ROOT" && ./install.sh --upgrade --target "$t" >/dev/null) || fail "upgrade exited nonzero"
+  [ -x "$t/.claude/hooks/protect-files.sh" ] || fail "upgrade did not restore the managed executable mode"
 }
 
 # Modes travel from git through cp, so this pins the source modes. It matters
@@ -413,89 +577,11 @@ test_installed_shell_scripts_are_executable() {
   done
 }
 
-# Three same-repo PRs with failing checks, differing only in branch prefix: the
-# fleet's default, a renamed fleet, and a hand-written human branch.
-NIGHT_SHIFT_PRS='[
-  {"number":1,"headRefName":"claude/issue-1-a","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
-  {"number":2,"headRefName":"bot/issue-2-b","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
-  {"number":3,"headRefName":"feature/hand-written","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]}
-]'
-
-# Same idea for the driver test, but with two renamed-fleet PRs so the expected
-# count (2) differs from what the old hardcoded-claude/ helper would report (1).
-# A fixture where both answers are 1 would pass with the bug still in place.
-NIGHT_SHIFT_RENAMED_PRS='[
-  {"number":1,"headRefName":"claude/issue-1-a","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
-  {"number":2,"headRefName":"bot/issue-2-b","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]},
-  {"number":3,"headRefName":"bot/issue-3-c","isCrossRepository":false,"statusCheckRollup":[{"conclusion":"failure"}]}
-]'
-
-agent_pr_numbers() {  # $1 = branch prefix ("-" omits the argument), $2 = PR JSON
-  node -e '
-    const { failingAgentPRs } = require(process.argv[1]);
-    const prefix = process.argv[2] === "-" ? undefined : process.argv[2];
-    process.stdout.write(
-      failingAgentPRs(JSON.parse(process.argv[3]), "acme", prefix).map((p) => p.number).join(",")
-    );
-  ' "$ROOT/tiers/3-ops/local/failing-agent-prs.cjs" "$1" "$2"
-}
-
-test_night_shift_helper_defaults_to_the_claude_prefix() {
-  assert_eq "1" "$(agent_pr_numbers - "$NIGHT_SHIFT_PRS")"
-}
-
-test_night_shift_helper_honors_a_custom_branch_prefix() {
-  assert_eq "2" "$(agent_pr_numbers bot "$NIGHT_SHIFT_PRS")"
-}
-
-test_branch_prefix_tolerates_a_hand_written_trailing_slash() {
-  # config.branchPrefix is hand-edited JSON; "bot/" is a plausible entry and
-  # must not become "bot//".
-  assert_eq "2" "$(agent_pr_numbers "bot/" "$NIGHT_SHIFT_PRS")"
-}
-
-test_blank_branch_prefix_does_not_match_every_pr() {
-  # A "" prefix must never reach startsWith(""), which is true for every branch
-  # name and would hand the night shift every failing PR in the repo — including
-  # hand-written human ones. Fail safe to the default instead.
-  assert_eq "1" "$(agent_pr_numbers "" "$NIGHT_SHIFT_PRS")"
-}
-
-make_gh_pr_mock() {  # $1 = bin dir, $2 = PR list JSON; issue list answers the kill switch
-  cat > "$1/gh" <<EOF
-#!/usr/bin/env bash
-case "\$*" in
-  *"issue list"*) echo 0 ;;
-  *"pr list"*) cat <<'JSON'
-$2
-JSON
-    ;;
-  *) exit 0 ;;
-esac
-EOF
-  chmod +x "$1/gh" 2>/dev/null || /bin/chmod +x "$1/gh"
-}
-
-# The regression that motivated threading the prefix: the helper hardcoded
-# claude/, so a repo that renamed branchPrefix got a night shift that reported
-# no work forever. Exercises the whole wiring — manifest to driver to helper.
-test_triage_driver_passes_manifest_branch_prefix_to_the_helper() {
-  local t; t="$(make_target_repo)"
-  local bin; bin="$(mktemp -d)"; local home; home="$(mktemp -d)"
-  ( export GH_MOCK_LOG="$bin/log" PATH="$bin:$PATH" HOME="$home"
-    make_gh_mock "$bin"
-    cd "$ROOT" && ./install.sh --tier 3 --target "$t" >/dev/null ) || fail "install exited nonzero"
-
-  jq '.config.branchPrefix = "bot"' "$t/.build-system.json" > "$t/.m" && mv "$t/.m" "$t/.build-system.json"
-  mkdir -p "$home/.build-system"
-  printf 'BS_REPO="acme/widget"\n' > "$home/.build-system/$(basename "$t").env"
-  make_gh_pr_mock "$bin" "$NIGHT_SHIFT_RENAMED_PRS"
-
-  local out
-  out="$( export PATH="$bin:$PATH" HOME="$home"
-    bash "$t/scripts/build-system/triage-run.sh" --check 2>&1 )"
-  echo "$out" | grep -q "WORK: failing agent PRs=2" \
-    || fail "driver did not use the manifest prefix (got: $out)"
+test_triage_driver_delegates_to_provenance_bound_controller() {
+  local f="$ROOT/tiers/3-ops/local/triage-run.sh"
+  assert_grep "$f" 'exec node "\$CONTROLLER" triage --json'
+  assert_grep "$ROOT/tiers/2-pipeline/scripts/build-system.cjs" 'provenanceMatches'
+  grep -q 'claude -p\|Bash(git\|Bash(gh' "$f" && fail "triage driver still delegates Git/GitHub to a model"
 }
 
 test_ops_scripts_pass_bash_syntax_check() {
@@ -506,10 +592,31 @@ test_ops_scripts_pass_bash_syntax_check() {
 test_actions_builder_variant_present_and_wired() {
   local f="$ROOT/tiers/3-ops/actions/actions-builder.yml"
   assert_file "$f"
-  assert_grep "$f" 'anthropics/claude-code-action@v1'
+  assert_grep "$f" '@anthropic-ai/claude-code@2\.1\.225'
   assert_grep "$f" 'plan:approved'
   assert_grep "$f" 'CLAUDE_CODE_OAUTH_TOKEN'
-  assert_grep "$f" '/build-next'
+  assert_grep "$f" 'scripts/build-system\.cjs run'
+  assert_grep "$f" 'builder:paused'
+  assert_grep "$f" "steps\.preflight\.outputs\.run == 'true'"
+}
+
+test_local_drivers_fail_closed_when_pause_state_is_unknown() {
+  assert_grep "$ROOT/tiers/2-pipeline/scripts/build-system.cjs" 'github\.paused\(ctx\.repo, "builder:paused"'
+  assert_grep "$ROOT/tiers/2-pipeline/scripts/build-system.cjs" 'github\.paused\(ctx\.repo, "triage:paused"'
+  assert_grep "$ROOT/tiers/2-pipeline/scripts/lib/github.cjs" 'check: options\.check !== false'
+}
+
+test_ops_models_have_no_git_or_github_delivery_tools() {
+  local f
+  for f in "$ROOT/tiers/3-ops/local/builder-run.sh" \
+           "$ROOT/tiers/3-ops/local/triage-run.sh"; do
+    assert_grep "$f" '^umask 077$'
+    grep -q 'Bash(git\|Bash(gh\|allowedTools' "$f" && fail "$f grants delivery tools"
+  done
+  assert_grep "$ROOT/tiers/2-pipeline/scripts/lib/adapters.cjs" '"Read,Edit,Write,Glob,Grep"'
+  assert_grep "$ROOT/tiers/2-pipeline/scripts/lib/adapters.cjs" 'const env = \{\}'
+  assert_grep "$ROOT/tiers/2-pipeline/scripts/lib/adapters.cjs" 'CLAUDE_CODE_OAUTH_TOKEN'
+  grep -q 'Bash' "$ROOT/tiers/2-pipeline/scripts/lib/adapters.cjs" && fail "adapter exposes Bash"
 }
 
 test_docs_reference_real_flags_and_paths() {
@@ -529,9 +636,9 @@ test_walkthrough_covers_the_undiscoverable_setup_steps() {
   local d="$ROOT/docs/getting-started.md"
   assert_grep "$d" 'needs-triage'
   assert_grep "$d" 'CLAUDE_CODE_OAUTH_TOKEN'
-  assert_grep "$d" 'Night Shift Control'
+  assert_grep "$d" 'RUNTIME_CONFIG'
   assert_grep "$d" 'launchctl'
-  assert_grep "$d" 'REPLACE:'
+  assert_grep "$d" 'actual automation credential'
 }
 
 test_readme_quickstart_commands_are_real() {
@@ -541,7 +648,8 @@ test_readme_quickstart_commands_are_real() {
 }
 
 main() {
-  for t in $(declare -F | awk '{print $3}' | grep '^test_'); do run_test "$t"; done
+  local filter="${TEST_FILTER:-^test_}"
+  for t in $(declare -F | awk '{print $3}' | grep -E "$filter"); do run_test "$t"; done
   echo "passed=$PASS failed=$FAIL"
   [ $FAIL -eq 0 ]
 }

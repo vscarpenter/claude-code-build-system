@@ -1,9 +1,16 @@
 ---
-description: Run a strict red, green, refactor cycle. Writes a failing test first, pauses for approval, then writes the minimum implementation. Auto-invokes specialist subagents based on files touched.
+name: tdd
+description: Run a strict red, green, refactor cycle continuously after the feature spec or design is approved. Auto-invokes specialist reviewers based on files touched.
 argument-hint: <behavior description>
 ---
 
-Run a strict red, green, refactor cycle for the following behavior: $ARGUMENTS
+Run a strict red, green, refactor cycle for the behavior described by the
+user's current request. In Claude slash-command mode, the supplied arguments
+are: $ARGUMENTS
+
+If `$ARGUMENTS` appears literally instead of being substituted, ignore that
+marker and use the user's request. This keeps the same source usable as an
+Agent Skill in harnesses that do not implement Claude's argument substitution.
 
 ## The cycle
 
@@ -16,11 +23,11 @@ Run a strict red, green, refactor cycle for the following behavior: $ARGUMENTS
    - Use the project's test framework and conventions.
    - Fail for the right reason (the behavior does not exist yet), not for setup or compilation reasons.
 4. Run the test. Confirm it fails. Capture the failure output.
-5. **Stop.** Output the test code and the failure output. Wait for explicit approval before proceeding to Phase 2.
+5. Record the test code and failure output as the red-phase evidence, then continue to Phase 2. Stop only if the test fails for an unexpected reason or exposes a material ambiguity in the approved spec.
 
 ### Phase 2: Green
 
-Only proceed if approval was given.
+Proceed when the user has approved the feature spec/design or explicitly invoked this workflow for a well-scoped behavior. That approval covers the complete red-green-refactor pass; do not add a per-test approval gate.
 
 1. Write the minimum implementation that makes the test pass. No extra features. No defensive code beyond what the test requires.
 2. Run the test. Confirm it passes.
@@ -51,7 +58,7 @@ The subagent runs read-only. You decide whether to act on its findings before co
 
 ## Output format
 
-At the end of each phase, output a clearly labeled section header:
+Keep a compact evidence record for each phase and report it when the full cycle completes:
 
 ```
 ## Phase 1: Red
@@ -60,7 +67,7 @@ At the end of each phase, output a clearly labeled section header:
 
 [test failure output]
 
-Awaiting approval to proceed to Phase 2.
+Red evidence captured; continuing to Green.
 ```
 
-Wait for approval after Phase 1. Phases 2 and 3 can run together if the implementation is straightforward and no refactor is needed.
+Run Phases 1 through 3 continuously. Pause only for a genuine blocker, a material change to the approved design, or a safety boundary that requires new authority.

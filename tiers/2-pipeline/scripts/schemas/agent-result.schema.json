@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Build System AgentResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "summary", "plan", "changedPaths", "needsHuman", "usage"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "status": { "enum": ["planned", "completed", "escalated", "failed", "no-work"] },
+    "summary": { "type": "string", "maxLength": 20000 },
+    "plan": { "type": ["string", "null"], "maxLength": 100000 },
+    "changedPaths": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "type": "string", "maxLength": 10000 }
+    },
+    "needsHuman": { "type": "boolean" },
+    "usage": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens", "costUsd"],
+      "properties": {
+        "inputTokens": { "type": "integer", "minimum": 0 },
+        "outputTokens": { "type": "integer", "minimum": 0 },
+        "cacheReadTokens": { "type": "integer", "minimum": 0 },
+        "cacheWriteTokens": { "type": "integer", "minimum": 0 },
+        "totalTokens": { "type": "integer", "minimum": 0 },
+        "costUsd": { "type": ["number", "null"], "minimum": 0 }
+      }
+    }
+  }
+}

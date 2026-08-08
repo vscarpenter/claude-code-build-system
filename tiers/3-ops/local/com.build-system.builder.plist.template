@@ -2,13 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   launchd template for the builder loop (macOS).
-  1. Replace {{REPO_PATH}} with your repo's absolute path.
+  1. Replace {{RUNTIME_PATH}} with the versioned libexec runtime directory and
+     {{RUNTIME_CONFIG}} with the installer-printed JSON config path.
   2. Adjust the Hour/Minute entries for how often the builder should wake.
      Wake-ups are cheap: the driver pre-checks labels and exits without
      invoking Claude when there is no work.
   3. Save as ~/Library/LaunchAgents/com.build-system.builder.<repo>.plist
   4. launchctl load ~/Library/LaunchAgents/com.build-system.builder.<repo>.plist
-  Linux? Use cron instead:  0 9,13,17 * * *  {{REPO_PATH}}/scripts/build-system/builder-run.sh
+  Linux? Use cron instead:  0 9,13,17 * * *  {{RUNTIME_PATH}}/builder-run.sh --config {{RUNTIME_CONFIG}}
 -->
 <plist version="1.0">
 <dict>
@@ -17,7 +18,9 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>{{REPO_PATH}}/scripts/build-system/builder-run.sh</string>
+    <string>{{RUNTIME_PATH}}/builder-run.sh</string>
+    <string>--config</string>
+    <string>{{RUNTIME_CONFIG}}</string>
   </array>
   <key>StartCalendarInterval</key>
   <array>

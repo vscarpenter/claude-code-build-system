@@ -119,7 +119,7 @@ The agent commands need three project facts: verify commands, protected paths, a
 
 ## Why local-first for the builder, with a hosted variant
 
-The battle-tested loop runs on a Mac under launchd. Local execution gets you cheap pre-checks (a `gh` label count before any Claude run), your own credentials and toolchain, and worktree isolation next to the checkout you already trust. The hosted variant exists because "a machine that is usually on" is a real barrier for some adopters, but it is documented as the second path: every trigger is a full Claude run, and the tool allowlist and OAuth token live in repo settings instead of your keychain.
+The primary loop runs on macOS under launchd. Local execution gets cheap deterministic selection, the existing toolchain, and private state. The hosted variant exists because “a machine that is usually on” is a real barrier. Both now enter the same controller and compete through an atomic remote lease; the harness no longer owns GitHub delivery.
 
 ## Why labels are the state store
 
@@ -129,6 +129,9 @@ Labels survive process restarts, cost nothing to read, are visible in the GitHub
 
 - **npm/bun packaging and a marketplace plugin.** Two more distribution channels to keep honest; the installer already covers both new and existing repos.
 - **Windows-native support.** Same position as v1: bash under WSL works, native PowerShell ports would drift.
-- **AGENTS.md / Codex variants.** The standards doc marks the Claude-specific part, but shipping parallel agent configs doubles the test surface.
+- **OpenCode and Copilot autonomous adapters.** Tier 1 and Tier 2 emit
+  `AGENTS.md` and portable Agent Skills. Claude and Codex have bounded
+  controller adapters; OpenCode and Copilot remain Context/Interactive until
+  their native sandbox, output, auth, and hosted profiles pass conformance.
 - **Telemetry dashboards.** The token markers and run logs are grep-able; aggregation belongs to whoever needs it.
 - **Multi-standards support.** One canonical standards doc plus a skeleton. A standards *registry* is complexity without a second user.

@@ -25,14 +25,14 @@ Per-stack starting points for `verifyCommands`:
 | Java + Maven | `mvn -q verify` |
 | Python | `pytest`, `ruff check .`, `mypy .` |
 
-`protectedPaths` deserves thought. The builder and night shift already refuse `.github/workflows/**`; list everything else an unattended agent must never touch: deploy config, infrastructure, security policy, generated schemas. When in doubt, protect it. The agent escalates instead, which costs you a label swap, not an incident.
+`protectedPaths` deserves thought. The controller always refuses its own manifest, agent instructions, Git metadata, workflow definitions, and controller runtime. Add deploy config, infrastructure, security policy, generated schemas, and any domain-specific crown jewels. The controller inspects the real Git diff, including both sides of renames, symlinks, and gitlinks.
 
 ## Adapting managed files
 
 Every installed file is yours to edit. The manifest's hashes exist precisely so `--upgrade` can tell your edits from stale copies: modified files are kept with a `KEEP` notice. Common adaptations that survive upgrades untouched:
 
 - Rewriting `CLAUDE.md` for the project (expected; it ships as a template).
-- Adding project-specific fixers to the night shift's mechanical-fix list in `triage-prs.md`.
+- Adding deterministic diagnostic checks to the night shift without granting it write authority.
 - Tightening the issue form's placeholder examples to your domain.
 - Swapping the review workflow's plugin or prompt.
 
@@ -40,7 +40,7 @@ The cost of adapting a file is that future upstream improvements to it stop flow
 
 ## Renaming the branch prefix
 
-`branchPrefix` defaults to `claude`. Change it in the manifest and the commands follow; the label descriptions and docs use the generic `<branchPrefix>` form already. Pick the prefix before the first build run: the night shift identifies the fleet's own PRs by it, so changing it later strands open PRs under the old name.
+`branchPrefix` defaults to `agent`. Pick it before the first build run. It is part of lease refs, controller-created delivery branches, and provenance records; changing it does not transfer old runs.
 
 ## Renaming labels
 
@@ -48,7 +48,7 @@ The label vocabulary lives in `tiers/2-pipeline/labels.json` and is referenced b
 
 ## Swapping runners
 
-The local drivers and the hosted variant run the same `/build-next` contract, so you can move between them freely. Run both only with care: nothing prevents two builders from claiming different issues concurrently, but they will race on labels and worktrees if the schedules overlap. Pick one primary. The kill-switch labels stop either.
+The local and hosted variants enter the same controller. They may wake together: the per-issue remote Git-ref lease gives one winner, and per-run worktrees prevent checkout collisions. Keep one primary anyway so budgets and evidence live under one state root; the shipped local ledger is not a cross-host global budget.
 
 ## Changing the schedule
 

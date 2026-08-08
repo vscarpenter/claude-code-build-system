@@ -1,7 +1,7 @@
 name: Hosted builder (reference variant)
-# The local launchd/cron driver is the primary, battle-tested path; this is
-# the hosted equivalent for repos without an always-on machine. Same contract:
-# it runs /build-next, which never merges and obeys .build-system.json.
+# The local launchd/cron driver is the primary path; this is the hosted
+# equivalent for repos without an always-on machine. Same contract:
+# it enters the deterministic controller, which never merges and enforces .build-system.json.
 #
 # Cost note: every labeled event and scheduled sweep is a Claude run. The
 # local driver's cheap label pre-check does not exist here — GitHub's event
@@ -31,11 +31,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: "/build-next"
-          claude_args: '--allowed-tools "Bash(git*),Bash(gh*),Edit,Write,Read"'
+      - name: Fail-closed queue and pause preflight
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          paused="$(gh issue list --repo "$GH_REPO" --label builder:paused --state open --json number --jq length)"
+          if [ "$paused" != "0" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "builder:paused is set"
+            exit 0
+          fi
+          actionable=0
+          for label in plan:approved ready-for-agent plan:revise; do
+            count="$(gh issue list --repo "$GH_REPO" --label "$label" --state open --json number --jq length)"
+            actionable=$((actionable + count))
+          done
+          if [ "$actionable" = "0" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "no actionable work"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.preflight.outputs.run == 'true'
+        with: { node-version: '20' }
+      - name: Install pinned Claude adapter runtime
+        if: steps.preflight.outputs.run == 'true'
+        run: npm install --global @anthropic-ai/claude-code@2.1.225
+      - name: Run deterministic controller
+        if: steps.preflight.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          XDG_STATE_HOME: ${{ runner.temp }}/build-system-state
+        run: node scripts/build-system.cjs run --harness claude

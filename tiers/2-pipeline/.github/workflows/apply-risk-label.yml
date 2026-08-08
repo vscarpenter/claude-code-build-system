@@ -58,4 +58,20 @@ jobs:
             if (!riskLabels.includes(target)) {
               await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [target] });
             }
+            // Gate records bind to an exact issue-body digest. Any reporter edit
+            // after triage invalidates readiness/approval before the controller
+            // can spend a model call or deliver stale intent.
+            if (context.payload.action === "edited") {
+              const invalidated = ["ready-for-agent", "plan:pending", "plan:approved"]
+                .filter((name) => labels.some((label) => label.name === name));
+              for (const name of invalidated) {
+                await github.rest.issues
+                  .removeLabel({ owner, repo, issue_number, name })
+                  .catch((e) => { if (e.status !== 404) throw e; });
+              }
+              if (invalidated.length && !labels.some((label) => label.name === "needs-triage")) {
+                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ["needs-triage"] });
+                core.info(`Issue contract changed; invalidated ${invalidated.join(", ")} and returned it to needs-triage.`);
+              }
+            }
             core.info(`Applied ${target}.`);

@@ -28,7 +28,7 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
 
 # Get a git diff --stat snapshot if we're in a git repo
 DIFF_STAT=""
-if [ -n "$CWD" ] && [ -d "$CWD/.git" ]; then
+if [ -n "$CWD" ] && git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   DIFF_STAT=$(cd "$CWD" && git diff --stat HEAD 2>/dev/null | tail -1 || echo "")
 fi
 

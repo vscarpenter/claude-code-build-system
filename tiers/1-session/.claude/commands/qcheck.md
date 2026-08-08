@@ -1,4 +1,5 @@
 ---
+name: qcheck
 description: Skeptical staff-engineer code review of every changed file in this session, against coding-standards.md and CLAUDE.md.
 ---
 

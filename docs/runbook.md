@@ -1,47 +1,81 @@
 # Runbook
 
-How to operate the pipeline day to day: the gates, the switches, and what to do when something goes sideways. If you have not run a change through it yet, start with [getting-started.md](getting-started.md) and come back here.
+## Before the first run
 
-## Gate 1: approving plans
+Fill every `REPLACE:` value in `.build-system.json`, then run:
 
-A `plan:pending` issue has a plan comment waiting on you. Three moves:
+```bash
+node scripts/build-system.cjs doctor --harness all
+node scripts/build-system.cjs run --harness claude --dry-run
+```
 
-- **Approve:** swap the label to `plan:approved`. The builder claims it on its next wake-up.
-- **Request changes:** comment `/revise <what should change>` and swap the label to `plan:revise`. The builder re-plans and hands it back as `plan:pending`.
-- **Take it yourself:** swap to `ready-for-human` and the fleet leaves it alone.
+`doctor` must report `READY` before autonomous use. Independently test the real automation credential against a sandbox repository: direct default-branch push, force-push, and merge must all be rejected. Record that live result outside the model-generated evidence.
 
-Label swaps are the whole protocol. The builder cannot see your intent in prose alone; a `plan:pending` issue with an unlabeled "looks good" comment waits forever.
+## Gate 1
 
-## Gate 2: releasing
+A `plan:pending` issue contains a controller marker binding the current contract digest to the proposed plan digest.
 
-Gate 2 is the merge button, deliberately manual. Verify the PR against the acceptance criteria from the contract, confirm the rollback plan is real, then merge. No rollback path means no approval. The builder filled the PR body with the verification steps and the rollback plan from the issue, so the review is a checklist, not archaeology.
+- Approve with `node scripts/build-system.cjs approve --issue N`. The controller verifies the current GitHub actor has write permission and records the exact digests.
+- Request revision by moving the lifecycle label to `plan:revise` and explaining the change.
+- Take over by moving it to `ready-for-human`.
 
-## Pausing the fleet
+Editing contract-bearing issue content invalidates readiness through the risk workflow. The build controller also recomputes the digest before it calls a worker.
 
-- `builder:paused` on any open issue stops the builder loop.
-- `triage:paused` on any open issue stops the night shift. Convention: keep one pinned "Night Shift Control" issue that carries the switch and receives the nightly self-audit reports.
-- Both switches work from a phone, with no code change and no shell access. Remove the label to resume.
+## Gate 2
 
-## Reading the telemetry
+Gate 2 is the protected merge. Review acceptance criteria, rollback, controller verification evidence, and CI. The controller never merges. If effective rules are unknown, delivery stops before push.
 
-Every builder run ends with `OPENED_PR=<n>` or `OPENED_PR=none`. The local driver pairs that line with the run's token usage and posts a hidden comment marker (`<!-- build-system-tokens ... -->`) on the PR it opened. Run logs land in `BS_LOG_DIR` (default `docs/ops/agent-logs/`): JSON output per builder run, a text log per night-shift run, and `gh-errors.log` when the pre-checks cannot reach GitHub.
+## Pause and resume
 
-## Failure modes
+- Any open issue with `builder:paused` blocks new builder work and is checked again before delivery.
+- Any open issue with `triage:paused` blocks night-shift diagnosis.
+- Removing the label resumes future runs. In-flight work may finish editing, but delivery is barred by the second builder pause check.
 
-| Symptom | Likely cause | Fix |
+## Commands
+
+```bash
+node scripts/build-system.cjs status --json
+node scripts/build-system.cjs run --harness codex --issue 42
+node scripts/build-system.cjs triage --json
+node scripts/build-system.cjs reconcile
+node scripts/build-system.cjs reconcile --apply
+```
+
+`reconcile` is read-only unless `--apply` is present. Apply mode CAS-releases expired leases, makes stranded active work retryable, marks exactly matched merged deliveries done, and escalates provenance drift.
+
+## Evidence
+
+Run evidence lives under `${XDG_STATE_HOME:-~/.local/state}/build-system/<repo-id>/`, never in the working repository. Directories are mode `0700`; files are mode `0600`.
+
+- `runs/<run-id>/work-order.json` — controller-owned bounds;
+- `prompt.txt`, provider events, stderr, normalized `agent-result.json` — worker artifacts;
+- `evidence.jsonl` — append-only, hash-chained controller events;
+- `provenance/pr-N.json` — exact repository, PR, branch, base/head SHA, digests, and verification;
+- `budget.json` — daily starts, consecutive failures, and observed provider cost.
+
+Provider usage may be unavailable. Unknown is stored as unknown, not zero. PR identity comes from GitHub postconditions, never provider prose.
+
+## Failure matrix
+
+| Symptom | Meaning | Operator action |
 |---|---|---|
-| Builder never wakes with work waiting | `gh` auth expired; pre-check fails safe to idle | `gh auth status`, then check `gh-errors.log` |
-| Builder escalates every issue | `config` still has `REPLACE:` placeholders | fill in `.build-system.json` |
-| Runs start but produce nothing | `claude` CLI missing from the scheduler's PATH | check the PATH append in the driver |
-| Worktree in a weird state | an interrupted run | delete it; the driver recreates it from the default branch |
-| Labels missing on a new repo | `gh` was unauthenticated during install | run the printed `MANUAL:` commands |
-| Night shift opens no fix PRs | nothing failing, or every failure needs judgment | read the self-audit report |
-| Issue gets no `risk:*` label | the body carries more than one "Risk tier" section, so the parser refuses to guess | edit the body, or apply the label yourself; an unlabeled issue is planned as `risk:feature` and stops at Gate 1 |
+| `UNSAFE gate-2` | branch protection unavailable or insufficient | fix rules; then perform live credential proof |
+| `claimed-elsewhere` | another runner won the remote lease | wait; inspect `reconcile` if it outlives expiry |
+| `agent:retryable` | safe pre-delivery failure | inspect evidence; rerun after cause is fixed |
+| `ready-for-human` | policy/provenance/judgment boundary | inspect; never relabel blindly |
+| adapter not ready | CLI, auth, instruction, or skill missing | run `doctor --harness <name>` interactively |
+| protected path / symlink / gitlink | worker crossed delivery policy | review as a security event |
+| verification failed or timed out | exact candidate was not proven | fix config/dependencies or retry; no PR was opened |
+| remote branch exists | prior delivery or crash needs reconciliation | inspect remote branch and provenance; do not force |
+| circuit breaker open | consecutive failures hit configured maximum | diagnose evidence and reset intentionally |
+| triage `provenance_mismatch` | failing PR is not the exact controller artifact | handle manually; it is intentionally excluded |
 
-## Cost notes
+## Night shift
 
-Idle wake-ups are free by design: the drivers pre-check labels with `gh` before invoking Claude. What costs tokens is planning, building, and triage. The risk tiers hold the spend down where it matters least: docs and chore work skips the second planning round-trip, and the night shift caps itself at three fix PRs per run. The hosted variant costs more per unit of work because every trigger is a full Claude run with no cheap pre-check in front of it.
+Night shift is diagnosis-only. It does not invoke a model and does not mutate a PR. It reports failing same-repository PRs only when their PR number, branch, and current head SHA match the local controller provenance record. This protects against fork names, copied prefixes, and post-verification force updates.
 
-## When the agent goes wrong
+## Cost and limits
 
-The failure you will actually see is an escalation: `ready-for-human` plus a comment saying exactly what blocked it. That is the system working. The failure to watch for is a PR that passes checks but misreads the contract, which is what Gate 2 is for. If a bad PR gets close to merging, tighten the contract fields on the issue form before tightening the agent; a vague contract produces a plausible plan for the wrong problem.
+No-work selection and deterministic triage invoke no provider. Every real run is reserved in the local ledger before adapter invocation. `dailyRunLimit`, `maxConsecutiveFailures`, `maxBudgetUsd`, run timeout, verification timeout, file count, and diff bytes are configured in `.build-system.json`.
+
+The budget ledger is local to one state root; it is not a cross-host billing authority. Use provider-side caps for global spend and do not run multiple hosts with independent state roots if a single shared ceiling is required.

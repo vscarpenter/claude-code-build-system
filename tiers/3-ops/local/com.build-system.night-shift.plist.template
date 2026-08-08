@@ -2,10 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   launchd template for the night shift (macOS). One run per evening.
-  1. Replace {{REPO_PATH}} with your repo's absolute path.
+  1. Replace {{RUNTIME_PATH}} with the versioned libexec runtime directory and
+     {{RUNTIME_CONFIG}} with the installer-printed JSON config path.
   2. Save as ~/Library/LaunchAgents/com.build-system.night-shift.<repo>.plist
   3. launchctl load ~/Library/LaunchAgents/com.build-system.night-shift.<repo>.plist
-  Linux? Use cron instead:  0 20 * * *  {{REPO_PATH}}/scripts/build-system/triage-run.sh
+  Linux? Use cron instead:  0 20 * * *  {{RUNTIME_PATH}}/triage-run.sh --config {{RUNTIME_CONFIG}}
 -->
 <plist version="1.0">
 <dict>
@@ -14,7 +15,9 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>{{REPO_PATH}}/scripts/build-system/triage-run.sh</string>
+    <string>{{RUNTIME_PATH}}/triage-run.sh</string>
+    <string>--config</string>
+    <string>{{RUNTIME_CONFIG}}</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict><key>Hour</key><integer>20</integer><key>Minute</key><integer>0</integer></dict>

@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.0.0 — unreleased
+
+Version 3 replaces prompt-owned delivery with a deterministic controller. The
+controller now owns queue selection, atomic remote-ref leases, per-run
+worktrees, contract/plan/approval digests, protected-path policy, verification,
+Git delivery, pull-request postconditions, label transitions, budgets,
+reconciliation, and hash-chained evidence. Claude and Codex are bounded worker
+adapters without GitHub credentials or Git/GitHub tools; provider prose is
+never accepted as proof that a PR exists.
+
+The installer now rejects repository subdirectories and symlink escapes,
+preflights and rolls back target writes, preserves local modifications across
+repeated upgrades, restores executable modes, refuses tier downgrades, and
+writes collision-resistant JSON runtime configuration instead of sourcing
+shell code. Tier 3 runs an integrity-checked immutable controller copy.
+
+The former autonomous night-shift fixer is now provenance-bound diagnosis
+only. It reports failing PRs only when repository, PR number, branch, and head
+SHA match controller-authored evidence. This deliberate capability reduction
+removes the last scheduled path that handed a model Git/GitHub delivery powers.
+
+Portability is explicit: Claude and Codex have controller adapters; OpenCode
+and supported GitHub Copilot surfaces receive `AGENTS.md` and shared Agent
+Skills but are not advertised as autonomous until native adapters pass the
+same conformance suite. A new interactive HTML explainer and flow visualization
+make the trust boundaries and proof ledger inspectable.
+
 ## 2.0.0 — unreleased
 
 The repo grows from a session-level reference configuration into the full

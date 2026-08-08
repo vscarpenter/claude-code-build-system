@@ -1,0 +1,1324 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An interactive, evidence-first explainer for the controller-owned build system.">
+  <link rel="icon" href="data:,">
+  <title>Build System — Signal Ledger</title>
+  <script>
+    (() => {
+      try {
+        const saved = localStorage.getItem("build-system-theme");
+        const preferred = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = saved || preferred;
+      } catch (_) {}
+    })();
+  </script>
+  <style>
+    @font-face {
+      font-family: "Geist";
+      src: url("https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/Geist-Variable.woff2") format("woff2");
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: "Geist Mono";
+      src: url("https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-mono/GeistMono-Variable.woff2") format("woff2");
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    :root {
+      color-scheme: light;
+      --surface-canvas: #fbfbfa;
+      --surface-raised: #f5f4f0;
+      --surface-sunk: #ebe8df;
+      --ink: #10100f;
+      --ink-2: #4c4941;
+      --ink-3: #6d6859;
+      --ink-4: #bdb8aa;
+      --rule: #dfddd6;
+      --rule-strong: #cfcabe;
+      --accent: #2167f3;
+      --accent-deep: #184fc7;
+      --accent-soft: #e9f1ff;
+      --code-bg: #0f1419;
+      --code-ink: #e6edf3;
+      --code-dim: #7d8590;
+      --status-safe: #187a4d;
+      --status-warn: #8a5a00;
+      --status-stop: #a63c32;
+      --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --space-1: .25rem;
+      --space-2: .5rem;
+      --space-3: .75rem;
+      --space-4: 1rem;
+      --space-5: 1.5rem;
+      --space-6: 2rem;
+      --space-7: 3rem;
+      --space-8: 4rem;
+      --space-9: 6rem;
+      --space-10: 8rem;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 10px;
+      --shadow-md: 0 8px 22px -12px rgba(0, 0, 0, .16), 0 2px 6px rgba(0, 0, 0, .05);
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --surface-canvas: #0c0c0b;
+      --surface-raised: #15140f;
+      --surface-sunk: #1d1c16;
+      --ink: #f4f1ea;
+      --ink-2: #c0bcaf;
+      --ink-3: #888471;
+      --ink-4: #4a4738;
+      --rule: #232118;
+      --rule-strong: #2c2920;
+      --accent: #5188f6;
+      --accent-deep: #79a3f7;
+      --accent-soft: rgba(81, 136, 246, .12);
+      --status-safe: #61b98b;
+      --status-warn: #d4b878;
+      --status-stop: #d97768;
+      --shadow-md: 0 8px 22px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .4);
+    }
+
+    html {
+      box-sizing: border-box;
+      scroll-behavior: smooth;
+      scrollbar-gutter: stable;
+    }
+
+    *, *::before, *::after { box-sizing: inherit; }
+
+    body {
+      margin: 0;
+      overflow-x: clip;
+      background: var(--surface-canvas);
+      color: var(--ink-2);
+      font-family: var(--font-sans);
+      font-feature-settings: "ss01", "cv11";
+      font-optical-sizing: auto;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    ::selection { background: var(--accent-soft); color: var(--accent); }
+
+    a { color: var(--accent); text-underline-offset: .2em; text-decoration-thickness: 1px; }
+    a:hover { color: var(--accent-deep); }
+
+    button, a { -webkit-tap-highlight-color: transparent; }
+
+    button:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    button { font: inherit; }
+
+    .skip-link {
+      position: fixed;
+      inset: var(--space-2) auto auto var(--space-2);
+      z-index: 100;
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-sm);
+      background: var(--ink);
+      color: var(--surface-canvas);
+      transform: translateY(-180%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid var(--rule);
+      background: color-mix(in srgb, var(--surface-canvas) 92%, transparent);
+      backdrop-filter: blur(14px);
+    }
+
+    .header-inner {
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-5);
+    }
+
+    .wordmark {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-3);
+      color: var(--ink);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .mark {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--rule-strong);
+      border-radius: var(--radius-sm);
+      font: 600 .68rem/1 var(--font-mono);
+    }
+
+    .version,
+    .eyebrow,
+    .meta,
+    .status-line,
+    .flow-index,
+    .receipt-key,
+    .capability-state,
+    .footer-meta {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .version {
+      border: 1px solid var(--rule);
+      border-radius: 999px;
+      padding: .2rem .48rem;
+      color: var(--ink-3);
+      font-size: .68rem;
+      font-weight: 500;
+    }
+
+    .header-actions { display: flex; align-items: center; gap: var(--space-5); }
+
+    .site-nav { display: flex; align-items: center; gap: var(--space-5); }
+
+    .site-nav a {
+      padding-block: var(--space-2);
+      color: var(--ink-3);
+      font-size: .86rem;
+      text-decoration: none;
+    }
+
+    .site-nav a:hover { color: var(--ink); }
+
+    .theme-toggle {
+      min-height: 36px;
+      padding: 0 var(--space-3);
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink-3);
+      cursor: pointer;
+      font: .68rem/1 var(--font-mono);
+    }
+
+    .theme-toggle:active { transform: scale(.98); }
+
+    .hero {
+      min-height: min(780px, calc(100svh - 64px));
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+      align-items: center;
+      gap: clamp(var(--space-7), 8vw, var(--space-10));
+      padding-block: var(--space-9);
+    }
+
+    .eyebrow {
+      margin: 0 0 var(--space-5);
+      color: var(--ink-3);
+      font-size: .7rem;
+      line-height: 1.2;
+      text-transform: lowercase;
+    }
+
+    .eyebrow::before { content: "// "; opacity: .55; }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1, h2, h3 {
+      color: var(--ink);
+      font-weight: 600;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 11ch;
+      margin-bottom: var(--space-6);
+      font-size: clamp(3rem, 6.7vw, 5.35rem);
+      line-height: 1.02;
+    }
+
+    h2 {
+      margin-bottom: var(--space-4);
+      font-size: clamp(2.25rem, 4.6vw, 3.8rem);
+      line-height: 1.04;
+    }
+
+    h3 { font-size: 1.25rem; line-height: 1.2; }
+
+    .accent-period { color: var(--accent); }
+
+    .lead {
+      max-width: 66ch;
+      margin-bottom: var(--space-6);
+      color: var(--ink-2);
+      font-size: clamp(1.05rem, 1.7vw, 1.25rem);
+      line-height: 1.55;
+      text-wrap: pretty;
+    }
+
+    .hero-proof { align-self: end; margin-bottom: var(--space-5); }
+
+    .proof-sheet {
+      overflow: hidden;
+      border: 1px solid #232a32;
+      border-radius: var(--radius-lg);
+      background: var(--code-bg);
+      color: var(--code-ink);
+      box-shadow: var(--shadow-md);
+    }
+
+    .proof-sheet-header,
+    .receipt-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid #232a32;
+      color: var(--code-dim);
+      font: .68rem/1.4 var(--font-mono);
+    }
+
+    .proof-sheet-header span:first-child::before,
+    .receipt-header span:first-child::before {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: var(--space-2);
+      border-radius: 50%;
+      background: #5e6670;
+      vertical-align: .08em;
+    }
+
+    .proof-sheet-body { padding: var(--space-5); }
+
+    .proof-sheet strong {
+      display: block;
+      margin-bottom: var(--space-5);
+      color: #fff;
+      font-size: clamp(2.8rem, 6vw, 4.9rem);
+      line-height: .9;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .proof-sheet strong small {
+      display: block;
+      margin-top: var(--space-2);
+      color: var(--code-dim);
+      font: .68rem/1.4 var(--font-mono);
+    }
+
+    .proof-line {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: var(--space-3);
+      padding-block: var(--space-3);
+      border-top: 1px solid #232a32;
+      font: .72rem/1.5 var(--font-mono);
+    }
+
+    .proof-line span:first-child { color: var(--code-dim); }
+    .proof-line span:last-child { color: var(--code-ink); }
+
+    .hero-note {
+      margin: var(--space-3) 0 0;
+      color: var(--ink-3);
+      font: .68rem/1.5 var(--font-mono);
+    }
+
+    .hero-copy,
+    .hero-proof { animation: enter .5s var(--ease) both; }
+    .hero-proof { animation-delay: .08s; }
+
+    @keyframes enter {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .provider-rail {
+      border-block: 1px solid var(--rule);
+      background: var(--surface-raised);
+    }
+
+    .provider-inner {
+      min-height: 74px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-5);
+    }
+
+    .status-line {
+      color: var(--ink-3);
+      font-size: .68rem;
+      line-height: 1.5;
+    }
+
+    .status-line strong { color: var(--ink); font-weight: 600; }
+
+    .provider-tabs {
+      display: inline-flex;
+      gap: var(--space-1);
+      padding: var(--space-1);
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface-canvas);
+    }
+
+    .provider-tabs button,
+    .scenario-controls button {
+      min-height: 36px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink-3);
+      cursor: pointer;
+      font-size: .76rem;
+    }
+
+    .provider-tabs button { padding: 0 var(--space-3); }
+
+    .provider-tabs button[aria-selected="true"] {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .provider-tabs button:active,
+    .scenario-controls button:active,
+    .flow-step:active { transform: scale(.98); }
+
+    .section {
+      padding-block: var(--space-10);
+      scroll-margin-top: 64px;
+    }
+
+    .section-header {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+      gap: var(--space-8);
+      align-items: end;
+      margin-bottom: var(--space-8);
+    }
+
+    .section-header .eyebrow { margin-bottom: var(--space-4); }
+    .section-header h2 { max-width: 16ch; margin-bottom: 0; }
+
+    .section-copy {
+      max-width: 60ch;
+      margin: 0;
+      color: var(--ink-2);
+      font-size: 1rem;
+      line-height: 1.62;
+      text-wrap: pretty;
+    }
+
+    .flow-layout {
+      display: grid;
+      grid-template-columns: minmax(340px, .82fr) minmax(0, 1.18fr);
+      gap: var(--space-8);
+      align-items: start;
+    }
+
+    .flow-list {
+      position: relative;
+      display: grid;
+      border-top: 1px solid var(--rule);
+    }
+
+    .flow-list::before {
+      content: "";
+      position: absolute;
+      top: 28px;
+      bottom: 28px;
+      left: 23px;
+      width: 1px;
+      background: var(--rule-strong);
+    }
+
+    .flow-step {
+      position: relative;
+      min-height: 86px;
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--space-4);
+      width: 100%;
+      padding: var(--space-4) var(--space-3) var(--space-4) 0;
+      border: 0;
+      border-bottom: 1px solid var(--rule);
+      border-radius: 0;
+      background: transparent;
+      color: var(--ink-2);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .flow-step::before {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      top: 50%;
+      left: 18px;
+      width: 11px;
+      height: 11px;
+      border: 2px solid var(--ink-4);
+      border-radius: 50%;
+      background: var(--surface-canvas);
+      transform: translateY(-50%);
+    }
+
+    .flow-step[aria-selected="true"] {
+      background: var(--surface-raised);
+      color: var(--ink);
+    }
+
+    .flow-step[aria-selected="true"]::before {
+      border-color: var(--accent);
+      background: var(--accent);
+      box-shadow: 0 0 0 5px var(--accent-soft);
+    }
+
+    .flow-step[data-complete="true"]::before {
+      border-color: var(--ink-3);
+      background: var(--ink-3);
+    }
+
+    .flow-index { justify-self: end; color: var(--ink-3); font-size: .68rem; }
+
+    .flow-name strong { display: block; color: inherit; font-size: 1rem; font-weight: 600; }
+    .flow-name small { display: block; margin-top: .18rem; color: var(--ink-3); font-size: .78rem; }
+    .flow-owner { color: var(--ink-3); font: .65rem/1.3 var(--font-mono); text-transform: lowercase; }
+
+    .evidence-receipt {
+      position: sticky;
+      top: 94px;
+      overflow: hidden;
+      border: 1px solid #232a32;
+      border-radius: var(--radius-lg);
+      background: var(--code-bg);
+      color: var(--code-ink);
+      box-shadow: var(--shadow-md);
+    }
+
+    .receipt-body { padding: clamp(var(--space-5), 4vw, var(--space-7)); }
+
+    .receipt-step {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+
+    .receipt-step strong {
+      color: #fff;
+      font-size: clamp(1.75rem, 4vw, 3rem);
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .receipt-step span {
+      color: var(--code-dim);
+      font: .68rem/1.3 var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .receipt-summary {
+      max-width: 58ch;
+      margin-bottom: var(--space-7);
+      color: #c9d1d9;
+      font-size: 1rem;
+      line-height: 1.6;
+      text-wrap: pretty;
+    }
+
+    .receipt-grid { display: grid; }
+
+    .receipt-row {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      gap: var(--space-4);
+      padding-block: var(--space-3);
+      border-top: 1px solid #232a32;
+      font: .75rem/1.55 var(--font-mono);
+    }
+
+    .receipt-key { color: var(--code-dim); }
+    .receipt-value { min-width: 0; overflow-wrap: anywhere; color: var(--code-ink); }
+    .receipt-value[data-tone="signal"] { color: #8ab4ff; }
+
+    .trust-section { background: var(--surface-raised); }
+
+    .trust-map {
+      display: grid;
+      grid-template-columns: 1fr 1.08fr 1fr;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-lg);
+      background: var(--surface-canvas);
+    }
+
+    .trust-zone {
+      min-width: 0;
+      padding: var(--space-6);
+    }
+
+    .trust-zone + .trust-zone { border-left: 1px solid var(--rule); }
+    .trust-zone.controller { background: var(--surface-sunk); }
+
+    .trust-zone .meta { margin-bottom: var(--space-5); color: var(--ink-3); font-size: .67rem; }
+    .trust-zone h3 { margin-bottom: var(--space-3); }
+    .trust-zone p { min-height: 76px; margin-bottom: var(--space-5); line-height: 1.55; text-wrap: pretty; }
+
+    .plain-list,
+    .release-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .plain-list li {
+      display: grid;
+      grid-template-columns: 16px 1fr;
+      gap: var(--space-2);
+      padding-block: var(--space-2);
+      border-top: 1px solid var(--rule);
+      color: var(--ink-3);
+      font-size: .82rem;
+      line-height: 1.45;
+    }
+
+    .plain-list li::before { content: "—"; color: var(--ink-4); }
+
+    .boundary-note {
+      margin: var(--space-5) 0 0;
+      padding-top: var(--space-4);
+      border-top: 1px solid var(--rule-strong);
+      color: var(--ink-3);
+      font: .68rem/1.55 var(--font-mono);
+    }
+
+    .failure-lab {
+      display: grid;
+      grid-template-columns: minmax(250px, .65fr) minmax(0, 1.35fr);
+      gap: var(--space-7);
+      margin-top: var(--space-9);
+      padding-top: var(--space-7);
+      border-top: 1px solid var(--rule-strong);
+    }
+
+    .failure-intro h3 { margin-bottom: var(--space-3); font-size: 1.5rem; }
+    .failure-intro p { margin-bottom: var(--space-5); line-height: 1.6; }
+
+    .scenario-controls { display: grid; gap: var(--space-2); }
+
+    .scenario-controls button {
+      min-height: 42px;
+      padding: 0 var(--space-3);
+      border: 1px solid transparent;
+      text-align: left;
+    }
+
+    .scenario-controls button[aria-pressed="true"] {
+      border-color: var(--rule-strong);
+      background: var(--surface-canvas);
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .failure-records { border-top: 1px solid var(--rule-strong); }
+
+    .failure-record {
+      display: grid;
+      grid-template-columns: 42px 1fr minmax(90px, auto);
+      gap: var(--space-4);
+      align-items: baseline;
+      padding: var(--space-4) 0;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .failure-record .meta { color: var(--ink-3); font-size: .67rem; }
+    .failure-record strong { display: block; margin-bottom: .2rem; color: var(--ink); font-size: .92rem; }
+    .failure-record p { margin: 0; color: var(--ink-3); font-size: .82rem; line-height: 1.45; }
+
+    .record-state {
+      justify-self: end;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--ink-3);
+      font: .66rem/1.2 var(--font-mono);
+    }
+
+    .record-state::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .record-state[data-state="safe"] { color: var(--status-safe); }
+    .record-state[data-state="recovery"] { color: var(--status-warn); }
+    .record-state[data-state="blocked"] { color: var(--status-stop); }
+
+    .capability-block { margin-top: var(--space-9); }
+
+    .subhead {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: var(--space-5);
+      margin-bottom: var(--space-5);
+    }
+
+    .subhead h3 { margin-bottom: 0; font-size: 1.5rem; }
+    .subhead p { max-width: 55ch; margin: 0; color: var(--ink-3); font-size: .88rem; line-height: 1.5; }
+
+    .matrix-wrap { overflow-x: auto; border-top: 1px solid var(--rule-strong); }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      font-size: .84rem;
+    }
+
+    caption {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    th, td {
+      padding: var(--space-4) var(--space-3);
+      border-bottom: 1px solid var(--rule);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    thead th { color: var(--ink-3); font: 500 .68rem/1.4 var(--font-mono); }
+    tbody th { color: var(--ink); font-weight: 500; }
+    tbody tr:hover { background: var(--surface-raised); }
+
+    .capability-state {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--ink-3);
+      font-size: .68rem;
+      line-height: 1.4;
+    }
+
+    .capability-state::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .capability-state.yes { color: var(--status-safe); }
+    .capability-state.partial { color: var(--status-warn); }
+
+    .proof-layout {
+      display: grid;
+      grid-template-columns: minmax(260px, .72fr) minmax(0, 1.28fr);
+      gap: var(--space-8);
+      align-items: start;
+    }
+
+    .ledger-rules { border-top: 1px solid var(--rule-strong); }
+
+    .ledger-rule {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: var(--space-4);
+      padding: var(--space-4) 0;
+      border-bottom: 1px solid var(--rule);
+      line-height: 1.5;
+    }
+
+    .ledger-rule .meta { color: var(--ink-3); font-size: .67rem; }
+    .ledger-rule span:last-child { color: var(--ink-2); font-size: .9rem; }
+
+    .event-ledger {
+      overflow: hidden;
+      border: 1px solid #232a32;
+      border-radius: var(--radius-lg);
+      background: var(--code-bg);
+      color: var(--code-ink);
+    }
+
+    .event-row {
+      display: grid;
+      grid-template-columns: 48px 100px minmax(0, 1fr) auto;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border-top: 1px solid #232a32;
+      font: .72rem/1.45 var(--font-mono);
+    }
+
+    .event-row:first-of-type { border-top: 0; }
+    .event-row span:first-child,
+    .event-row span:last-child { color: var(--code-dim); }
+    .event-type { color: #8ab4ff; }
+    .event-hash { min-width: 0; overflow-wrap: anywhere; }
+
+    .release-section { padding-top: 0; }
+
+    .release-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr);
+      gap: var(--space-8);
+      padding-block: var(--space-8);
+      border-block: 1px solid var(--rule-strong);
+    }
+
+    .release-panel > * { min-width: 0; }
+
+    .release-panel h2 { max-width: 15ch; margin-bottom: var(--space-5); font-size: clamp(2rem, 4vw, 3.2rem); }
+    .release-panel > div > p { max-width: 60ch; margin: 0; line-height: 1.6; }
+
+    .release-list { counter-reset: release; border-top: 1px solid var(--rule-strong); }
+
+    .release-list li {
+      counter-increment: release;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: var(--space-3);
+      padding: var(--space-4) 0;
+      border-bottom: 1px solid var(--rule);
+      color: var(--ink-2);
+      font-size: .9rem;
+      line-height: 1.45;
+    }
+
+    .release-list li::before {
+      content: "0" counter(release);
+      color: var(--ink-3);
+      font: .67rem/1.6 var(--font-mono);
+    }
+
+    .command {
+      display: block;
+      max-width: min(58ch, 100%);
+      margin-top: var(--space-6);
+      padding: var(--space-4);
+      overflow-x: auto;
+      border-radius: var(--radius-md);
+      background: var(--code-bg);
+      color: var(--code-ink);
+      font: .74rem/1.6 var(--font-mono);
+      white-space: nowrap;
+    }
+
+    .command::before { content: "$ "; color: var(--code-dim); }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-6);
+      padding-block: var(--space-6);
+      color: var(--ink-3);
+      font-size: .78rem;
+    }
+
+    footer a { color: var(--ink-3); }
+    footer a:hover { color: var(--accent); }
+    .footer-meta { font-size: .68rem; }
+
+    @media (hover: hover) and (pointer: fine) {
+      .flow-step:hover { background: var(--surface-raised); }
+      .provider-tabs button:hover,
+      .scenario-controls button:hover,
+      .theme-toggle:hover { color: var(--ink); }
+      .trust-zone:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+      .trust-zone { transition: transform 200ms var(--ease), box-shadow 200ms var(--ease); }
+    }
+
+    @media (max-width: 900px) {
+      .hero,
+      .section-header,
+      .flow-layout,
+      .failure-lab,
+      .proof-layout,
+      .release-panel { grid-template-columns: 1fr; }
+
+      .hero { min-height: auto; gap: var(--space-8); padding-block: var(--space-8); }
+      h1 { max-width: 12ch; }
+      .hero-proof { max-width: 620px; margin-bottom: 0; }
+      .section { padding-block: var(--space-9); }
+      .section-header { gap: var(--space-5); }
+      .section-header h2 { max-width: 18ch; }
+      .flow-layout { gap: var(--space-6); }
+      .evidence-receipt { position: static; }
+      .trust-map { grid-template-columns: 1fr; }
+      .trust-zone + .trust-zone { border-left: 0; border-top: 1px solid var(--rule); }
+      .trust-zone p { min-height: 0; }
+      .failure-lab { gap: var(--space-6); }
+      .scenario-controls { grid-template-columns: repeat(2, 1fr); }
+      .subhead { align-items: start; flex-direction: column; }
+    }
+
+    @media (max-width: 680px) {
+      .shell { width: min(1180px, calc(100% - 28px)); }
+      .site-nav { display: none; }
+      .header-actions { gap: var(--space-3); }
+      .wordmark > span:not(.mark):not(.version) { display: none; }
+      .hero { padding-block: var(--space-8); }
+      h1 { font-size: clamp(2.8rem, 14vw, 4rem); }
+      h2 { font-size: clamp(2rem, 10vw, 2.8rem); }
+      .provider-inner { align-items: stretch; flex-direction: column; padding-block: var(--space-4); }
+      .provider-tabs { width: 100%; overflow-x: auto; }
+      .provider-tabs button { flex: 1 0 auto; min-height: 42px; }
+      .section { padding-block: var(--space-8); }
+      .section-header { margin-bottom: var(--space-6); }
+      .flow-step { grid-template-columns: 52px minmax(0, 1fr); }
+      .flow-list::before { left: 23px; }
+      .flow-owner { display: none; }
+      .receipt-row { grid-template-columns: 88px minmax(0, 1fr); }
+      .trust-zone { padding: var(--space-5); }
+      .scenario-controls { grid-template-columns: 1fr; }
+      .failure-record { grid-template-columns: 34px minmax(0, 1fr); }
+      .record-state { grid-column: 2; justify-self: start; }
+      .event-row { grid-template-columns: 36px 78px minmax(0, 1fr); }
+      .event-row span:last-child { display: none; }
+      .release-panel { gap: var(--space-6); padding-block: var(--space-7); }
+      footer { flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .hero-copy, .hero-proof { animation: none; }
+      .trust-zone { transition: none; }
+    }
+
+    @media (forced-colors: active) {
+      .flow-step[aria-selected="true"]::before,
+      .record-state::before,
+      .capability-state::before { forced-color-adjust: none; background: Highlight; }
+      .accent-period { color: LinkText; }
+    }
+
+    @media print {
+      :root, [data-theme="dark"] { color-scheme: light; }
+      body { background: #fff; color: #222; }
+      .site-header, .provider-rail, .scenario-controls, .theme-toggle { display: none; }
+      .hero { min-height: auto; padding-block: 36px; }
+      .section { padding-block: 36px; content-visibility: visible; }
+      .evidence-receipt { position: static; }
+      .trust-zone { break-inside: avoid; }
+      a { color: #222; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="wordmark" href="#top" aria-label="Build System home">
+        <span class="mark" aria-hidden="true">bs</span>
+        <span>build system</span>
+        <span class="version">v3</span>
+      </a>
+      <div class="header-actions">
+        <nav class="site-nav" aria-label="Page sections">
+          <a href="#flow">flow</a>
+          <a href="#trust">trust</a>
+          <a href="#proof">proof</a>
+          <a href="#release">release</a>
+        </nav>
+        <button class="theme-toggle" type="button" id="theme-toggle">theme · light</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="shell hero" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">control plane · issue to pull request</p>
+        <h1 id="hero-title">The model works. The controller decides<span class="accent-period" aria-hidden="true">.</span></h1>
+        <p class="lead">A build system where AI can plan and edit—but cannot claim success, own GitHub, or cross the two human gates. Every release fact comes from code, Git, or the platform.</p>
+        <a href="#flow">Trace one controlled run</a>
+      </div>
+
+      <aside class="hero-proof" aria-label="Core control record">
+        <div class="proof-sheet">
+          <div class="proof-sheet-header"><span>control record / current</span><span>schema v1</span></div>
+          <div class="proof-sheet-body">
+            <strong>1<small>winning lease per issue</small></strong>
+            <div class="proof-line"><span>model</span><span>plan or working-tree edits</span></div>
+            <div class="proof-line"><span>controller</span><span>policy, proof, delivery</span></div>
+            <div class="proof-line"><span>human</span><span>approval and release</span></div>
+          </div>
+        </div>
+        <p class="hero-note">local and hosted runners may wake together; only one fence can mutate.</p>
+      </aside>
+    </section>
+
+    <div class="provider-rail">
+      <div class="shell provider-inner">
+        <div class="status-line">control plane <strong>enforced</strong> · provider <strong id="provider-label">Claude</strong></div>
+        <div class="provider-tabs" role="tablist" aria-label="Harness profile">
+          <button type="button" role="tab" id="provider-claude" aria-controls="worker-profile" aria-selected="true" tabindex="0" data-provider="Claude">Claude</button>
+          <button type="button" role="tab" id="provider-codex" aria-controls="worker-profile" aria-selected="false" tabindex="-1" data-provider="Codex">Codex</button>
+          <button type="button" role="tab" id="provider-opencode" aria-controls="worker-profile" aria-selected="false" tabindex="-1" data-provider="OpenCode">OpenCode</button>
+          <button type="button" role="tab" id="provider-copilot" aria-controls="worker-profile" aria-selected="false" tabindex="-1" data-provider="Copilot">Copilot</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="section shell" id="flow" aria-labelledby="flow-title">
+      <header class="section-header">
+        <div>
+          <p class="eyebrow">custody · seven checks</p>
+          <h2 id="flow-title">One run. Seven accountable handoffs.</h2>
+        </div>
+        <p class="section-copy">Select a stage to inspect its custody record. The active step updates a concrete receipt: who owns the action, what can change, and which evidence must exist before control moves forward.</p>
+      </header>
+
+      <div class="flow-layout">
+        <div class="flow-list" role="tablist" aria-label="Build custody stages" aria-orientation="vertical">
+          <button class="flow-step" type="button" role="tab" id="flow-contract" aria-selected="true" tabindex="0" aria-controls="evidence-panel" data-step="0">
+            <span class="flow-index">01</span><span class="flow-name"><strong>Contract</strong><small>Issue + risk</small></span><span class="flow-owner">human</span>
+          </button>
+          <button class="flow-step" type="button" role="tab" id="flow-claim" aria-selected="false" tabindex="-1" aria-controls="evidence-panel" data-step="1">
+            <span class="flow-index">02</span><span class="flow-name"><strong>Claim</strong><small>Atomic lease</small></span><span class="flow-owner">control</span>
+          </button>
+          <button class="flow-step" type="button" role="tab" id="flow-plan" aria-selected="false" tabindex="-1" aria-controls="evidence-panel" data-step="2">
+            <span class="flow-index">03</span><span class="flow-name"><strong>Plan</strong><small>Strict result</small></span><span class="flow-owner">model</span>
+          </button>
+          <button class="flow-step" type="button" role="tab" id="flow-gate" aria-selected="false" tabindex="-1" aria-controls="evidence-panel" data-step="3">
+            <span class="flow-index">04</span><span class="flow-name"><strong>Gate 1</strong><small>Bound digests</small></span><span class="flow-owner">human</span>
+          </button>
+          <button class="flow-step" type="button" role="tab" id="flow-edit" aria-selected="false" tabindex="-1" aria-controls="evidence-panel" data-step="4">
+            <span class="flow-index">05</span><span class="flow-name"><strong>Edit</strong><small>Isolated tree</small></span><span class="flow-owner">model</span>
+          </button>
+          <button class="flow-step" type="button" role="tab" id="flow-prove" aria-selected="false" tabindex="-1" aria-controls="evidence-panel" data-step="5">
+            <span class="flow-index">06</span><span class="flow-name"><strong>Prove</strong><small>Policy + tests</small></span><span class="flow-owner">control</span>
+          </button>
+          <button class="flow-step" type="button" role="tab" id="flow-deliver" aria-selected="false" tabindex="-1" aria-controls="evidence-panel" data-step="6">
+            <span class="flow-index">07</span><span class="flow-name"><strong>Deliver</strong><small>PR + Gate 2</small></span><span class="flow-owner">platform</span>
+          </button>
+        </div>
+
+        <aside class="evidence-receipt" id="evidence-panel" role="tabpanel" aria-labelledby="flow-contract" aria-live="polite">
+          <div class="receipt-header"><span>evidence receipt</span><span id="receipt-event">contract.created</span></div>
+          <div class="receipt-body">
+            <div class="receipt-step"><strong id="receipt-title">Contract</strong><span id="receipt-count">01 / 07</span></div>
+            <p class="receipt-summary" id="receipt-summary">A structured issue becomes the canonical work contract. Risk stays visible, and triage is an explicit act.</p>
+            <div class="receipt-grid">
+              <div class="receipt-row"><span class="receipt-key">custody</span><span class="receipt-value" id="receipt-owner">human authority</span></div>
+              <div class="receipt-row"><span class="receipt-key">proof</span><span class="receipt-value" data-tone="signal" id="receipt-proof">normalized contract bytes + SHA-256 digest</span></div>
+              <div class="receipt-row"><span class="receipt-key">mutation</span><span class="receipt-value" id="receipt-mutation">issue contract only</span></div>
+              <div class="receipt-row"><span class="receipt-key">next</span><span class="receipt-value" id="receipt-next">atomic remote-ref claim</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section trust-section" id="trust" aria-labelledby="trust-title">
+      <div class="shell">
+        <header class="section-header">
+          <div>
+            <p class="eyebrow">trust boundary · split authority</p>
+            <h2 id="trust-title">Credentials stop where creativity begins.</h2>
+          </div>
+          <p class="section-copy">The most capable process has the least authority. The process with GitHub credentials performs no creative work. Capability and custody deliberately move in opposite directions.</p>
+        </header>
+
+        <div class="trust-map">
+          <article class="trust-zone">
+            <p class="meta">01 / untrusted input</p>
+            <h3>Contract + repository</h3>
+            <p>Issue text, branch contents, dependencies, and model suggestions can all be adversarial.</p>
+            <ul class="plain-list"><li>No implicit trust from labels</li><li>No trust from branch prefix</li><li>No trust from model prose</li></ul>
+          </article>
+          <article class="trust-zone controller">
+            <p class="meta">02 / deterministic boundary</p>
+            <h3>Controller</h3>
+            <p>Owns the lease, worktree, digests, GitHub transport, verification, and evidence.</p>
+            <ul class="plain-list"><li>Rechecks before mutation</li><li>Fails closed on unknown</li><li>Observes exact SHAs</li></ul>
+          </article>
+          <article class="trust-zone" id="worker-profile" role="tabpanel" aria-labelledby="provider-claude">
+            <p class="meta">03 / bounded worker</p>
+            <h3 id="worker-name">Claude adapter</h3>
+            <p id="worker-copy">Read, Edit, Write, Glob, Grep. No Bash. No GitHub token. Structured JSON only.</p>
+            <ul class="plain-list"><li>Plan or ordinary edits</li><li>Cannot author delivery</li><li>Cannot certify verification</li></ul>
+            <p class="boundary-note" id="worker-boundary">OS isolation still requires a container or VM.</p>
+          </article>
+        </div>
+
+        <div class="failure-lab">
+          <div class="failure-intro">
+            <h3>Failure is a state, not a surprise.</h3>
+            <p>Inject a fault. The record changes, the recovery path becomes explicit, and the worker never gains a delivery route.</p>
+            <div class="scenario-controls" role="group" aria-label="Failure scenario">
+              <button type="button" aria-pressed="true" data-scenario="protected">Protected edit</button>
+              <button type="button" aria-pressed="false" data-scenario="verify">Verification fails</button>
+              <button type="button" aria-pressed="false" data-scenario="crash">Runner crashes</button>
+              <button type="button" aria-pressed="false" data-scenario="drift">PR head drifts</button>
+            </div>
+          </div>
+          <div class="failure-records" id="failure-records" aria-live="polite"></div>
+        </div>
+
+        <div class="capability-block">
+          <div class="subhead">
+            <h3>Shared kernel. Honest adapters.</h3>
+            <p>Instruction discovery is not autonomy. Every harness earns support through the same conformance contract.</p>
+          </div>
+          <div class="matrix-wrap">
+            <table>
+              <caption>Current harness capability and support levels</caption>
+              <thead><tr><th scope="col">Capability</th><th scope="col">Claude</th><th scope="col">Codex</th><th scope="col">OpenCode</th><th scope="col">Copilot</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Repository context + shared skills</th><td><span class="capability-state yes">Installed</span></td><td><span class="capability-state yes">Installed</span></td><td><span class="capability-state yes">Installed</span></td><td><span class="capability-state partial">Surface-dependent</span></td></tr>
+                <tr><th scope="row">Bounded controller worker</th><td><span class="capability-state yes">Implemented</span></td><td><span class="capability-state yes">Implemented</span></td><td><span class="capability-state">Not shipped</span></td><td><span class="capability-state">Not shipped</span></td></tr>
+                <tr><th scope="row">Controller-owned delivery</th><td><span class="capability-state yes">Implemented</span></td><td><span class="capability-state yes">Implemented</span></td><td><span class="capability-state">Unsupported</span></td><td><span class="capability-state">Unsupported</span></td></tr>
+                <tr><th scope="row">Hosted controller</th><td><span class="capability-state partial">Reference workflow</span></td><td><span class="capability-state">Unsupported</span></td><td><span class="capability-state">Unsupported</span></td><td><span class="capability-state">Unsupported</span></td></tr>
+                <tr><th scope="row">Live production proof</th><td><span class="capability-state partial">Required per repo</span></td><td><span class="capability-state partial">Required per repo</span></td><td>—</td><td>—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="proof" aria-labelledby="proof-title">
+      <header class="section-header">
+        <div>
+          <p class="eyebrow">evidence · durable receipt</p>
+          <h2 id="proof-title">The receipt is the product.</h2>
+        </div>
+        <p class="section-copy">A run is not done because the worker says so. Each claim is bound to a platform fact, an immutable SHA, and a tamper-evident event.</p>
+      </header>
+
+      <div class="proof-layout">
+        <div class="ledger-rules">
+          <div class="ledger-rule"><span class="meta">contract</span><span>Issue bytes → contract digest</span></div>
+          <div class="ledger-rule"><span class="meta">approval</span><span>Contract + plan digests → Gate 1</span></div>
+          <div class="ledger-rule"><span class="meta">candidate</span><span>Base SHA + audited diff → verified head</span></div>
+          <div class="ledger-rule"><span class="meta">delivery</span><span>Remote SHA + GitHub PR postcondition → provenance</span></div>
+        </div>
+        <div class="event-ledger" aria-label="Example tamper-evident event chain">
+          <div class="receipt-header"><span>run / bs_019fe26a</span><span>append only</span></div>
+          <div class="event-row"><span>001</span><span class="event-type">lease</span><span class="event-hash">prev ∅ → 7a1f…</span><span>accepted</span></div>
+          <div class="event-row"><span>002</span><span class="event-type">adapter</span><span class="event-hash">7a1f… → b2d9…</span><span>bounded</span></div>
+          <div class="event-row"><span>003</span><span class="event-type">policy</span><span class="event-hash">b2d9… → e41c…</span><span>passed</span></div>
+          <div class="event-row"><span>004</span><span class="event-type">verify</span><span class="event-hash">e41c… → 19fe…</span><span>passed</span></div>
+          <div class="event-row"><span>005</span><span class="event-type">delivery</span><span class="event-hash">19fe… → a60b…</span><span>observed</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section release-section shell" id="release" aria-labelledby="release-title">
+      <div class="release-panel">
+        <div>
+          <h2 id="release-title">Code proves the mechanism. Production proves the boundary.</h2>
+          <p>Release readiness is a set of observed facts, not an optimistic label. The final test uses the real repository, the real harness, and the real automation identity.</p>
+          <code class="command">node scripts/build-system.cjs doctor --harness all</code>
+        </div>
+        <ol class="release-list">
+          <li>Doctor reports READY against the intended repository.</li>
+          <li>Real harness issue-to-PR smoke succeeds.</li>
+          <li>Actual credential cannot direct-push, force-push, or merge.</li>
+          <li>Required checks exist and are enforced on the default branch.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell">
+    <span class="footer-meta">build system v3 · evidence over assertion</span>
+    <span><a href="architecture.md">Architecture</a> · <a href="runbook.md">Runbook</a></span>
+  </footer>
+
+  <script>
+    (() => {
+      const themeButton = document.getElementById("theme-toggle");
+      const syncThemeButton = () => {
+        const current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+        const next = current === "dark" ? "light" : "dark";
+        themeButton.textContent = `theme · ${current}`;
+        themeButton.setAttribute("aria-label", `Switch to ${next} theme`);
+      };
+
+      themeButton.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        document.documentElement.dataset.theme = next;
+        try { localStorage.setItem("build-system-theme", next); } catch (_) {}
+        syncThemeButton();
+      });
+      syncThemeButton();
+
+      const steps = [
+        { title: "Contract", event: "contract.created", owner: "human authority", summary: "A structured issue becomes the canonical work contract. Risk stays visible, and triage is an explicit act.", proof: "normalized contract bytes + SHA-256 digest", mutation: "issue contract only", next: "atomic remote-ref claim" },
+        { title: "Claim", event: "lease.acquired", owner: "controller authority", summary: "The first atomic remote-ref push wins. A lease commit binds the run, issue, base SHA, phase, expiry, and fencing token.", proof: "remote ref SHA + LeaseRecord", mutation: "lease reference via compare-and-swap", next: "bounded plan request" },
+        { title: "Plan", event: "plan.recorded", owner: "bounded worker", summary: "The selected adapter returns a strict plan result. Unknown fields, oversized output, and malformed results are rejected.", proof: "schema-valid AgentResult + raw provider events", mutation: "proposed plan only", next: "maintainer approval" },
+        { title: "Gate 1", event: "approval.bound", owner: "human authority", summary: "Approval records the current contract and plan digests. Edited issue content makes the prior approval stale before implementation begins.", proof: "maintainer identity + approval marker", mutation: "approval record only", next: "isolated worktree build" },
+        { title: "Edit", event: "candidate.prepared", owner: "bounded worker", summary: "The worker edits ordinary files in one controller-created worktree without GitHub credentials or delivery tools.", proof: "registered worktree + unchanged base HEAD", mutation: "ordinary working-tree files", next: "deterministic policy and verification" },
+        { title: "Prove", event: "candidate.verified", owner: "controller authority", summary: "Real Git changes are checked for path, mode, size, and provenance. Approved verification commands run independently on the exact candidate.", proof: "audited diff + command exits + output digests", mutation: "controller-authored candidate commit", next: "Gate 2 and exact-SHA delivery" },
+        { title: "Deliver", event: "delivery.observed", owner: "platform + human", summary: "The controller checks Gate 2, pushes one exact SHA, opens the pull request, and re-reads GitHub. A human remains the only merger.", proof: "remote branch SHA + PR head/base + provenance record", mutation: "branch + pull request metadata", next: "human review and merge" }
+      ];
+
+      const flowTabs = [...document.querySelectorAll(".flow-step")];
+      const renderStep = (index, focus = false) => {
+        const step = steps[index];
+        flowTabs.forEach((tab, tabIndex) => {
+          const active = tabIndex === index;
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+          tab.dataset.complete = String(tabIndex < index);
+        });
+        document.getElementById("receipt-title").textContent = step.title;
+        document.getElementById("receipt-count").textContent = `${String(index + 1).padStart(2, "0")} / 07`;
+        document.getElementById("receipt-event").textContent = step.event;
+        document.getElementById("receipt-summary").textContent = step.summary;
+        document.getElementById("receipt-owner").textContent = step.owner;
+        document.getElementById("receipt-proof").textContent = step.proof;
+        document.getElementById("receipt-mutation").textContent = step.mutation;
+        document.getElementById("receipt-next").textContent = step.next;
+        document.getElementById("evidence-panel").setAttribute("aria-labelledby", flowTabs[index].id);
+        if (focus) flowTabs[index].focus();
+      };
+
+      flowTabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => renderStep(index));
+        tab.addEventListener("keydown", (event) => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? flowTabs.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + flowTabs.length) % flowTabs.length;
+          renderStep(next, true);
+        });
+      });
+
+      const providers = {
+        Claude: { name: "Claude adapter", copy: "Read, Edit, Write, Glob, Grep. No Bash. No GitHub token. Structured JSON only.", boundary: "OS isolation still requires a container or VM." },
+        Codex: { name: "Codex adapter", copy: "Workspace-write sandbox. Network disabled. GitHub credentials removed. JSONL plus schema result.", boundary: "Git metadata remains controller-owned by design." },
+        OpenCode: { name: "OpenCode context", copy: "Instructions and shared skills install. Autonomous adapter and controller conformance are not shipped.", boundary: "Context support is not an autonomy claim." },
+        Copilot: { name: "Copilot context", copy: "Instruction and skill support varies by CLI, cloud, GitHub.com, and IDE surface.", boundary: "No autonomous adapter is claimed." }
+      };
+
+      const providerTabs = [...document.querySelectorAll("[data-provider]")];
+      const selectProvider = (index, focus = false) => {
+        providerTabs.forEach((tab, tabIndex) => {
+          const active = tabIndex === index;
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+        });
+        const provider = providerTabs[index].dataset.provider;
+        const profile = providers[provider];
+        document.getElementById("provider-label").textContent = provider;
+        document.getElementById("worker-name").textContent = profile.name;
+        document.getElementById("worker-copy").textContent = profile.copy;
+        document.getElementById("worker-boundary").textContent = profile.boundary;
+        document.getElementById("worker-profile").setAttribute("aria-labelledby", providerTabs[index].id);
+        if (focus) providerTabs[index].focus();
+      };
+
+      providerTabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => selectProvider(index));
+        tab.addEventListener("keydown", (event) => {
+          if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? providerTabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + providerTabs.length) % providerTabs.length;
+          selectProvider(next, true);
+        });
+      });
+
+      const scenarios = {
+        protected: [
+          ["Worker", "Edits deploy/prod.yml", "blocked"],
+          ["Policy", "Protected path detected", "blocked"],
+          ["Transport", "No push or pull-request call", "safe"],
+          ["State", "Moves to ready-for-human", "recovery"]
+        ],
+        verify: [
+          ["Worker", "Returns completed", "safe"],
+          ["Controller", "Runs exact approved commands", "recovery"],
+          ["Verifier", "Exit 1 or timeout", "blocked"],
+          ["Transport", "No delivery mutation", "safe"]
+        ],
+        crash: [
+          ["Lease", "Remains fenced until expiry", "recovery"],
+          ["Reconciler", "CAS releases stale reference", "safe"],
+          ["Lifecycle", "Records agent:retryable", "recovery"],
+          ["Retry", "New fencing token wins", "safe"]
+        ],
+        drift: [
+          ["Provenance", "Records verified head SHA", "safe"],
+          ["Pull request", "Head SHA changes", "blocked"],
+          ["Reconciler", "Exact match fails closed", "blocked"],
+          ["State", "Returns to ready-for-human", "recovery"]
+        ]
+      };
+
+      const failureRecords = document.getElementById("failure-records");
+      const stateLabels = { safe: "held safe", recovery: "recovery", blocked: "blocked" };
+      const renderScenario = (key) => {
+        const fragment = document.createDocumentFragment();
+        scenarios[key].forEach((item, index) => {
+          const record = document.createElement("article");
+          record.className = "failure-record";
+          const number = document.createElement("span");
+          number.className = "meta";
+          number.textContent = String(index + 1).padStart(2, "0");
+          const body = document.createElement("div");
+          const title = document.createElement("strong");
+          title.textContent = item[0];
+          const copy = document.createElement("p");
+          copy.textContent = item[1];
+          body.append(title, copy);
+          const state = document.createElement("span");
+          state.className = "record-state";
+          state.dataset.state = item[2];
+          state.textContent = stateLabels[item[2]];
+          record.append(number, body, state);
+          fragment.append(record);
+        });
+        failureRecords.replaceChildren(fragment);
+      };
+
+      document.querySelectorAll("[data-scenario]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll("[data-scenario]").forEach((peer) => peer.setAttribute("aria-pressed", String(peer === button)));
+          renderScenario(button.dataset.scenario);
+        });
+      });
+
+      renderScenario("protected");
+    })();
+  </script>
+</body>
+</html>
