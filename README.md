@@ -8,7 +8,7 @@ This project began as the companion to [Claude Code Is a Build System, Not a Cha
 
 > **Explore the system:** [Open the interactive Signal Ledger explainer](https://static.vinny.dev/build-system-explainer.html) to trace the seven custody handoffs, switch harness profiles, inject failure scenarios, and inspect the evidence chain.
 
-[Architecture](docs/architecture.md) · [Harness compatibility](docs/harness-compatibility.md) · [Adversarial review](docs/adversarial-review-2026-08-08.md)
+[Getting started](docs/getting-started.md) · [Choose a tier](docs/adoption.md) · [GitHub setup](docs/github-setup.md) · [Customize](docs/customizing.md) · [Architecture](docs/architecture.md) · [Harness compatibility](docs/harness-compatibility.md)
 
 ## What the system guarantees
 
@@ -22,33 +22,76 @@ Three rules shape the design:
 
 Gate 1 approves the plan. Gate 2 is the protected merge, kept human and enforced by repository rules. Atomic remote Git-ref leases prevent local and hosted schedulers from claiming the same issue. Crash reconciliation releases expired leases and verifies delivered PR provenance.
 
-## Install
+## Choose a tier
+
+Start with the smallest tier that solves today's problem. Tiers are cumulative,
+so installing Tier 2 also installs Tier 1.
+
+| Tier | Choose it when you want | What you need | Typical setup |
+|---|---|---|---:|
+| `--tier 1` **Session** | Repeatable spec, TDD, and review workflows inside an interactive harness | Bash, Git, jq, and Claude Code, Codex, OpenCode, or a supported Copilot surface | 15 min |
+| `--tier 2` **Pipeline** | A GitHub issue to become a bounded Claude- or Codex-authored PR | Tier 1, Node, authenticated `gh`, a GitHub remote, and protected-branch setup | 30 min |
+| `--tier 3` **Ops** | The Tier 2 controller to wake on a schedule | Tier 2 and an always-on macOS/Linux machine or the hosted Claude workflow | 1 hour |
+
+If you are unsure, install Tier 1. Read the [adoption guide](docs/adoption.md)
+before granting the controller or a scheduled runner more authority.
+
+## Quick start
+
+Clone this distribution beside—not inside—the repository you want to adopt.
+Set the two paths once so every command makes its working directory explicit:
 
 ```bash
 git clone https://github.com/vscarpenter/claude-code-build-system
-cd claude-code-build-system
-./install.sh --tier 1 --target /path/to/your/repo
+BUILD_SYSTEM_DIR="$PWD/claude-code-build-system"
+TARGET_REPO="/absolute/path/to/your/repo"
+
+"$BUILD_SYSTEM_DIR/install.sh" --tier 1 --target "$TARGET_REPO" --dry-run
+"$BUILD_SYSTEM_DIR/install.sh" --tier 1 --target "$TARGET_REPO"
+cd "$TARGET_REPO"
 ```
 
-| Tier | What it adds | Typical setup |
-|---|---|---:|
-| `--tier 1` **Session** | `CLAUDE.md`, `AGENTS.md`, shared spec/TDD/review skills, Claude hooks and reviewers, coding standards | 15 min |
-| `--tier 2` **Pipeline** | Contract issue form, 19-label state machine, controller, Claude/Codex adapters, leases, worktrees, policy, evidence | 30 min |
-| `--tier 3` **Ops** | Integrity-checked immutable runtime, scheduled builder, provenance-bound night-shift diagnosis, hosted Claude workflow | 1 hour |
+Customize the installed `CLAUDE.md` and inert Stop hook, commit the installed
+files, then use `/qspec`, `/tdd`, and `/qcheck` in Claude Code. Codex, OpenCode,
+and supported Copilot surfaces discover the same workflows as Agent Skills.
 
-Tiers are cumulative. `--dry-run` previews. `--force` explicitly adopts colliding files. `--upgrade` refreshes only installer-owned baselines and preserves local adaptations across repeated upgrades. Lower-tier installs cannot silently downgrade a higher-tier manifest.
-
-Tier 2 and 3 require a completed `.build-system.json` config. Then run:
+For the issue-to-PR controller, choose Tier 2 instead and select exactly one
+harness for the first readiness check:
 
 ```bash
-node scripts/build-system.cjs doctor --harness all
-node scripts/build-system.cjs run --harness claude --dry-run
-node scripts/build-system.cjs run --harness codex
-node scripts/build-system.cjs approve --issue 42
+"$BUILD_SYSTEM_DIR/install.sh" --tier 2 --target "$TARGET_REPO" --dry-run
+"$BUILD_SYSTEM_DIR/install.sh" --tier 2 --target "$TARGET_REPO"
+cd "$TARGET_REPO"
+
+# Replace every REPLACE: value and confirm the rest of the config first.
+${EDITOR:-vi} .build-system.json
+
+HARNESS=codex # or claude
+node scripts/build-system.cjs doctor --harness "$HARNESS"
+```
+
+Do not continue until `doctor` reports `READY`. Configure the required GitHub
+controls with the [GitHub setup guide](docs/github-setup.md), then follow the
+[first-PR walkthrough](docs/getting-started.md). `--harness all` is an optional
+compatibility audit only when both Claude Code and Codex are installed and
+authenticated; it is not a first-run requirement.
+
+After an issue is labeled `ready-for-agent`, the controller loop is:
+
+```bash
+node scripts/build-system.cjs run --harness "$HARNESS" --issue 42 --dry-run
+node scripts/build-system.cjs run --harness "$HARNESS" --issue 42
+node scripts/build-system.cjs approve --issue 42 # feature and risky plans only
+node scripts/build-system.cjs run --harness "$HARNESS" --issue 42
 node scripts/build-system.cjs reconcile
 ```
 
 `doctor` is read-only and fails closed. A `READY` result means the local checks passed; it is not a substitute for the release-only live proof that the actual automation credential cannot push, force-push, or merge through Gate 2.
+
+`--dry-run` previews installation. `--force` explicitly adopts colliding files.
+`--upgrade` refreshes only installer-owned baselines and preserves local
+adaptations across repeated upgrades. Lower-tier installs cannot silently
+downgrade a higher-tier manifest.
 
 ## Harness support
 

@@ -4,15 +4,26 @@ The system ships generic. Three kinds of customization make it yours: the manife
 
 ## The manifest config (required)
 
-After installing, open `.build-system.json` and replace the placeholders:
+After installing, open `.build-system.json`, replace every `REPLACE:` value,
+and confirm the remaining policy fields. The minimum project-specific block is:
 
 ```json
 "config": {
+  "repo": "owner/project",
+  "defaultBranch": "main",
+  "harness": "codex",
   "verifyCommands": ["bun run test", "bun run lint", "bun run typecheck"],
   "protectedPaths": ["deploy/**", "infra/**", "SECURITY.md"],
-  "branchPrefix": "claude"
+  "allowedPaths": ["src/**", "test/**", "package.json"],
+  "requiredChecks": ["test", "lint", "typecheck"],
+  "branchPrefix": "agent"
 }
 ```
+
+`repo` must exactly match
+`gh repo view --json nameWithOwner --jq .nameWithOwner`. `requiredChecks`
+contains GitHub check names; it is not a second copy of `verifyCommands`. See
+[GitHub setup](github-setup.md) before running `doctor`.
 
 Per-stack starting points for `verifyCommands`:
 
