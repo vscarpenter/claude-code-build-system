@@ -6,7 +6,7 @@ This project began as the companion to [Claude Code Is a Build System, Not a Cha
 
 **Version:** 3.0.0 · **Platforms:** macOS and Linux · **License:** MIT
 
-> **Explore the system:** [Open the interactive Signal Ledger explainer](docs/build-system-explainer.html) to trace the seven custody handoffs, switch harness profiles, inject failure scenarios, and inspect the evidence chain.
+> **Explore the system:** [Open the interactive Signal Ledger explainer](https://static.vinny.dev/build-system-explainer.html) to trace the seven custody handoffs, switch harness profiles, inject failure scenarios, and inspect the evidence chain.
 
 [Architecture](docs/architecture.md) · [Harness compatibility](docs/harness-compatibility.md) · [Adversarial review](docs/adversarial-review-2026-08-08.md)
 

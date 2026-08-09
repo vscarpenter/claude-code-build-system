@@ -87,6 +87,6 @@ Night shift is now deterministic diagnosis only. It reports failing PRs whose ex
 
 `builder:paused` blocks new runs and delivery. `triage:paused` blocks diagnosis. Both fail closed when GitHub state cannot be read.
 
-Run evidence is private under `${XDG_STATE_HOME:-~/.local/state}/build-system/<repo-id>/`. Use `reconcile` read-only first; add `--apply` only after reviewing expired leases and delivery provenance. See the [runbook](runbook.md) for the failure matrix and [the explainer](build-system-explainer.html) for the complete visual flow.
+Run evidence is private under `${XDG_STATE_HOME:-~/.local/state}/build-system/<repo-id>/`. Use `reconcile` read-only first; add `--apply` only after reviewing expired leases and delivery provenance. See the [runbook](runbook.md) for the failure matrix and [the explainer](https://static.vinny.dev/build-system-explainer.html) for the complete visual flow.
 
 Upgrade with `./install.sh --upgrade --target /path/to/repo`. Locally adapted files remain `KEEP` across repeated upgrades; use `--force` only when you intend to replace them.
