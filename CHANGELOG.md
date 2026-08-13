@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.0.0 — unreleased
+## 3.0.0 - 2026-08-08
 
 Version 3 replaces prompt-owned delivery with a deterministic controller. The
 controller now owns queue selection, atomic remote-ref leases, per-run
@@ -32,7 +32,7 @@ explicit, separates Tier 1 from the issue-to-PR path, checks one selected
 harness instead of requiring both, documents the complete manifest config and
 GitHub protection setup, and gives installer output a stable walkthrough URL.
 
-## 2.0.0 — unreleased
+## 2.0.0 - 2026-08-07
 
 The repo grows from a session-level reference configuration into the full
 installable issue → Claude → PR build system: three cumulative adoption tiers,
