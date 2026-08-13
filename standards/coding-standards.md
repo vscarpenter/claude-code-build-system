@@ -1,4 +1,4 @@
-<!-- Distributed by claude-code-build-system v2.0.0 · standards v18.0 ·
+<!-- Distributed by claude-code-build-system v3.0.0 · standards v18.0 ·
      canonical source: standards/coding-standards.md in that repo.
      Upgrade with: ./install.sh --upgrade -->
 
