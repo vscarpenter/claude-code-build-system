@@ -9,6 +9,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SYSTEM_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 MANIFEST_NAME=".build-system.json"
+WALKTHROUGH_URL="https://github.com/vscarpenter/claude-code-build-system/blob/main/docs/getting-started.md"
+CHANGELOG_URL="https://github.com/vscarpenter/claude-code-build-system/blob/main/CHANGELOG.md"
 
 TIER=""
 TARGET="."
@@ -324,58 +326,74 @@ do_install() {
 
 # The installer is where "what do I do now?" actually gets asked, so it answers
 # for the tier it just installed and nothing more. Each block is the short list
-# of things the system cannot do for itself; docs/getting-started.md carries the
+# of things the system cannot do for itself; the hosted walkthrough carries the
 # full narrative. Printed last, after the per-file lines, so it is what remains
 # on screen. Never printed for --dry-run: nothing was installed to follow up on.
 next_steps() {
   note ""
   if [ "$UPGRADE" = 1 ]; then
     note "NEXT STEPS (upgrade)"
-    note "  1. Review any KEEP lines above. Those files carry your local edits,"
+    note "  1. Change to the upgraded repository:"
+    printf '     cd %q\n' "$TARGET"
+    note "  2. Review any KEEP lines above. Those files carry your local edits,"
     note "     so this version's changes to them did not land."
-    note "  2. Read CHANGELOG.md for what moved in v$SYSTEM_VERSION."
-    note "  3. Commit $MANIFEST_NAME and the re-synced files."
+    note "  3. Read the changelog for what moved in v$SYSTEM_VERSION:"
+    note "     $CHANGELOG_URL"
+    note "  4. Commit $MANIFEST_NAME and the re-synced files."
     return 0
   fi
 
   note "NEXT STEPS (tier $TIER)"
   case "$TIER" in
     1)
-      note "  1. Set the Stop hook command in .claude/settings.json. It ships inert;"
-      note "     replace \`true\` with your fast typecheck."
-      note "  2. Rewrite CLAUDE.md for this project. It ships as a filled-in example."
-      note "  3. Commit $MANIFEST_NAME and the installed files."
-      note "  4. Open Claude Code and run the loop: /qspec, then /tdd, then /qcheck."
+      note "  1. Change to the installed repository:"
+      printf '     cd %q\n' "$TARGET"
+      note "  2. Review the Stop hook in .claude/settings.json. Leave it inert or"
+      note "     replace \`true\` with a fast typecheck that exists in this project."
+      note "  3. Rewrite CLAUDE.md for this project. It ships as a filled-in example."
+      note "  4. Commit $MANIFEST_NAME and the installed files."
+      note "  5. Run the workflow for your harness:"
+      note "     Claude Code: /qspec, then /tdd, then /qcheck."
+      note "     Codex/OpenCode/Copilot: invoke the qspec, tdd, and qcheck Agent Skills."
       ;;
     2)
-      note "  1. Fill in \"config\" in $MANIFEST_NAME: verifyCommands, protectedPaths,"
-      note "     and branchPrefix. The agents refuse to run while REPLACE: remains,"
-      note "     and renaming branchPrefix later strands open PRs under the old name."
-      note "  2. Set the Stop hook in .claude/settings.json and rewrite CLAUDE.md"
+      note "  1. Change to the installed repository:"
+      printf '     cd %q\n' "$TARGET"
+      note "  2. Replace every REPLACE: value in $MANIFEST_NAME:"
+      note "     repo, verifyCommands, protectedPaths, requiredChecks. Also confirm"
+      note "     defaultBranch, harness, allowedPaths, and branchPrefix before the first run."
+      note "     Renaming branchPrefix later strands open PRs under the old name."
+      note "  3. Set the Stop hook in .claude/settings.json and rewrite CLAUDE.md"
       note "     for this project (both ship from tier 1 as templates)."
-      note "  3. Commit $MANIFEST_NAME and the installed files."
-      note "  4. File a change with the issue form, then triage it in by swapping"
+      note "  4. Commit $MANIFEST_NAME and the installed files."
+      note "  5. Select the one controller harness you intend to use, then prove it:"
+      note '     HARNESS=claude # change to codex if that is your configured harness'
+      note '     node scripts/build-system.cjs doctor --harness "$HARNESS"'
+      note "  6. File a change with the issue form, then triage it in by swapping"
       note "     needs-triage -> ready-for-agent. The form does not apply it for you."
-      note "  5. Run node scripts/build-system.cjs doctor --harness all, then"
-      note "     node scripts/build-system.cjs run --harness <claude|codex>."
+      note "  7. Preview and run the selected issue:"
+      note '     node scripts/build-system.cjs run --harness "$HARNESS" --issue N --dry-run'
+      note '     node scripts/build-system.cjs run --harness "$HARNESS"'
       note "     Approve Gate 1 with: node scripts/build-system.cjs approve --issue N"
       ;;
     3)
-      note "  1. Finish the tier 1 and 2 setup first: the \"config\" block in"
+      note "  1. Change to the installed repository:"
+      printf '     cd %q\n' "$TARGET"
+      note "  2. Finish the tier 1 and 2 setup first: the \"config\" block in"
       note "     $MANIFEST_NAME, CLAUDE.md, and the .claude/settings.json Stop hook."
-      note "  2. Review the RUNTIME CONFIG path printed above and select its harness."
-      note "  3. Check the wiring without spending a token using the immutable"
+      note "  3. Review the RUNTIME CONFIG path printed above and select its harness."
+      note "  4. Check the wiring without spending a token using the immutable"
       note "     builder-run.sh --config <runtime-config> --check command."
-      note "  4. Open an issue titled \"Night Shift Control\" and pin it. It receives"
+      note "  5. Open an issue titled \"Night Shift Control\" and pin it. It receives"
       note "     the nightly self-audit reports and carries the triage:paused switch."
-      note "  5. Schedule the immutable drivers. Copy a .plist.template from"
+      note "  6. Schedule the immutable drivers. Copy a .plist.template from"
       note "     scripts/build-system/ to ~/Library/LaunchAgents/, replace"
       note "     {{RUNTIME_PATH}} and {{RUNTIME_CONFIG}}, then launchctl load it."
       note "     On Linux, use the immutable paths in cron."
       ;;
   esac
   note ""
-  note "  Full walkthrough: docs/getting-started.md"
+  note "  Full walkthrough: $WALKTHROUGH_URL"
 }
 
 write_manifest() {  # $1 = tier, $2 = "path<TAB>sha" file

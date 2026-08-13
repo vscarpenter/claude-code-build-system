@@ -27,6 +27,11 @@ Skills but are not advertised as autonomous until native adapters pass the
 same conformance suite. A new interactive HTML explainer and flow visualization
 make the trust boundaries and proof ledger inspectable.
 
+First-run guidance now keeps the distribution and target repositories
+explicit, separates Tier 1 from the issue-to-PR path, checks one selected
+harness instead of requiring both, documents the complete manifest config and
+GitHub protection setup, and gives installer output a stable walkthrough URL.
+
 ## 2.0.0 — unreleased
 
 The repo grows from a session-level reference configuration into the full

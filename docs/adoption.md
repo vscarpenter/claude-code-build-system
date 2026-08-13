@@ -11,12 +11,18 @@ Adopt the system in tiers. Each tier is useful on its own, each includes everyth
 | **3 Ops** | Integrity-checked immutable runtime, scheduled builder, provenance-bound diagnosis, hosted Claude adapter | Tier 2 and an always-on machine or hosted runner | an hour |
 
 ```bash
-./install.sh --tier 1 --target /path/to/your/repo
+BUILD_SYSTEM_DIR="/absolute/path/to/claude-code-build-system"
+TARGET_REPO="/absolute/path/to/your/repo"
+"$BUILD_SYSTEM_DIR/install.sh" --tier 1 --target "$TARGET_REPO"
+cd "$TARGET_REPO"
 ```
 
 Tiers are cumulative: `--tier 2` installs tier 1 as well. Add `--dry-run` to see the plan first.
 
-This page covers what each tier contains and how the installer decides what to write. For what to do once it finishes, read [getting-started.md](getting-started.md).
+This page covers what each tier contains and how the installer decides what to
+write. For copy-pasteable source/target commands and the first successful run,
+read [Getting started](getting-started.md). Tier 2 and 3 adopters must also
+complete [GitHub setup](github-setup.md).
 
 ## What the installer will not do
 

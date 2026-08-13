@@ -2,14 +2,23 @@
 
 ## Before the first run
 
-Fill every `REPLACE:` value in `.build-system.json`, then run:
+Fill every `REPLACE:` value in `.build-system.json`, complete
+[GitHub setup](github-setup.md), and select the one installed controller
+harness you intend to operate:
 
 ```bash
-node scripts/build-system.cjs doctor --harness all
-node scripts/build-system.cjs run --harness claude --dry-run
+HARNESS=codex # or claude
+node scripts/build-system.cjs doctor --harness "$HARNESS"
 ```
 
 `doctor` must report `READY` before autonomous use. Independently test the real automation credential against a sandbox repository: direct default-branch push, force-push, and merge must all be rejected. Record that live result outside the model-generated evidence.
+
+`--harness all` is an optional compatibility audit and requires both adapters.
+After an issue becomes actionable, preview its exact selection with:
+
+```bash
+node scripts/build-system.cjs run --harness "$HARNESS" --issue 42 --dry-run
+```
 
 ## Gate 1
 

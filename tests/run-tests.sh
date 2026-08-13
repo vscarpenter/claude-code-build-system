@@ -143,7 +143,10 @@ test_next_steps_are_tier_specific() {
   t="$(make_target_repo)"
   out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1 | next_steps_block)"
   [ -n "$out" ] || fail "tier 1 printed no next steps"
-  echo "$out" | grep -q "docs/getting-started.md" || fail "tier 1 omits the walkthrough pointer"
+  echo "$out" | grep -q "https://github.com/vscarpenter/claude-code-build-system/blob/main/docs/getting-started.md" \
+    || fail "tier 1 omits a reachable walkthrough URL"
+  echo "$out" | grep -q "cd .*$(basename "$t")" || fail "tier 1 omits changing to the target repository"
+  echo "$out" | grep -qi "Agent Skill" || fail "tier 1 omits the non-Claude workflow entry point"
   echo "$out" | grep -q "ready-for-agent" && fail "tier 1 next steps leak tier-2 instructions"
 
   local bin; bin="$(mktemp -d)"; make_gh_mock "$bin"
@@ -154,7 +157,22 @@ test_next_steps_are_tier_specific() {
   echo "$out" | grep -q "\.build-system\.json" || fail "tier 2 omits the config step"
   echo "$out" | grep -q "ready-for-agent" || fail "tier 2 omits the triage step"
   echo "$out" | grep -q "scripts/build-system.cjs run" || fail "tier 2 omits how to run the controller"
+  echo "$out" | grep -q 'HARNESS=claude' || fail "tier 2 omits selecting one harness"
+  echo "$out" | grep -q 'doctor --harness "\$HARNESS"' || fail "tier 2 does not doctor the selected harness"
+  echo "$out" | grep -q 'doctor --harness all' && fail "tier 2 incorrectly requires both harnesses"
+  echo "$out" | grep -q "repo, verifyCommands, protectedPaths, requiredChecks" \
+    || fail "tier 2 omits required manifest configuration fields"
   return 0
+}
+
+test_next_steps_quote_target_paths_with_spaces() {
+  local parent t out
+  parent="$(mktemp -d)"; t="$parent/target repo"
+  mkdir -p "$t"
+  git -C "$t" init -q
+  git -C "$t" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+  out="$(cd "$ROOT" && ./install.sh --tier 1 --target "$t" 2>&1 | next_steps_block)"
+  echo "$out" | grep -Fq 'target\ repo' || fail "target path is not shell-quoted in next steps"
 }
 
 # Tier 3's last mile is deliberately not automated: the installer never loads a
@@ -185,8 +203,9 @@ test_upgrade_next_steps_replace_first_run_setup() {
   (cd "$ROOT" && ./install.sh --tier 1 --target "$t" >/dev/null) || fail "install exited nonzero"
   local out; out="$(cd "$ROOT" && ./install.sh --upgrade --target "$t" 2>&1 | next_steps_block)"
   [ -n "$out" ] || fail "upgrade printed no next steps"
+  echo "$out" | grep -q "cd .*$(basename "$t")" || fail "upgrade omits changing to the target repository"
   echo "$out" | grep -qi "KEEP" || fail "upgrade omits the kept-files review"
-  echo "$out" | grep -q "docs/getting-started.md" && fail "upgrade re-sends the reader to the first-run walkthrough"
+  echo "$out" | grep -q "getting-started.md" && fail "upgrade re-sends the reader to the first-run walkthrough"
   return 0
 }
 
@@ -620,7 +639,7 @@ test_ops_models_have_no_git_or_github_delivery_tools() {
 }
 
 test_docs_reference_real_flags_and_paths() {
-  for d in getting-started architecture adoption runbook rationale customizing; do
+  for d in getting-started github-setup architecture adoption runbook rationale customizing; do
     assert_file "$ROOT/docs/$d.md"
   done
   assert_grep "$ROOT/docs/adoption.md" '\-\-upgrade'
@@ -634,6 +653,10 @@ test_docs_reference_real_flags_and_paths() {
 # tier 3's last mile is a scheduler the installer deliberately never loads.
 test_walkthrough_covers_the_undiscoverable_setup_steps() {
   local d="$ROOT/docs/getting-started.md"
+  assert_grep "$d" 'BUILD_SYSTEM_DIR='
+  assert_grep "$d" 'TARGET_REPO='
+  assert_grep "$d" 'HARNESS='
+  assert_grep "$d" 'cd "\$TARGET_REPO"'
   assert_grep "$d" 'needs-triage'
   assert_grep "$d" 'CLAUDE_CODE_OAUTH_TOKEN'
   assert_grep "$d" 'RUNTIME_CONFIG'
@@ -642,9 +665,22 @@ test_walkthrough_covers_the_undiscoverable_setup_steps() {
 }
 
 test_readme_quickstart_commands_are_real() {
-  assert_grep "$ROOT/README.md" 'install\.sh --tier 1'
+  assert_grep "$ROOT/README.md" 'install\.sh.*--tier 1'
+  assert_grep "$ROOT/README.md" 'BUILD_SYSTEM_DIR='
+  assert_grep "$ROOT/README.md" 'TARGET_REPO='
+  assert_grep "$ROOT/README.md" 'cd "\$TARGET_REPO"'
+  assert_grep "$ROOT/README.md" 'doctor --harness "\$HARNESS"'
   assert_grep "$ROOT/README.md" 'v1 → v2 map'
   assert_grep "$ROOT/README.md" '\-\-upgrade'
+}
+
+test_onboarding_checks_one_selected_harness() {
+  local f
+  for f in "$ROOT/README.md" "$ROOT/docs/getting-started.md" "$ROOT/docs/runbook.md" "$ROOT/install.sh"; do
+    grep -q 'doctor --harness all' "$f" && fail "$f makes both harnesses a first-run requirement"
+  done
+  assert_grep "$ROOT/docs/getting-started.md" 'doctor --harness "\$HARNESS"'
+  assert_grep "$ROOT/docs/runbook.md" 'doctor --harness "\$HARNESS"'
 }
 
 main() {

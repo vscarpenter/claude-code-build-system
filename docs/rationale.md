@@ -115,7 +115,14 @@ The hard problem in "install into 40 existing repos" is not copying files. It is
 
 ## Why runtime config lives in the manifest, not in rendered templates
 
-The agent commands need three project facts: verify commands, protected paths, and a branch prefix. Rendering them into the command text at install time would fork every command file per repo, and `--upgrade` would have to re-render instead of re-sync. Keeping the commands generic and reading `.build-system.json` with `jq` at runtime means one canonical command text everywhere, upgradable by hash. The placeholders self-describe (`REPLACE: e.g. bun run test`) because JSON has no comments, and the builder escalates rather than run unconfigured.
+The controller and agent workflows need repository identity, harness, verify
+commands, path policy, required checks, branch prefix, timeouts, and budgets.
+Rendering them into command text at install time would fork every managed file
+per repo, and `--upgrade` would have to re-render instead of re-sync. Keeping
+the workflows generic and reading `.build-system.json` at runtime means one
+canonical source everywhere, upgradable by hash. The placeholders self-describe
+(`REPLACE: e.g. bun run test`) because JSON has no comments, and the controller
+fails closed rather than run unconfigured.
 
 ## Why local-first for the builder, with a hosted variant
 

@@ -21,8 +21,11 @@ Reusable workflows live under `.agents/skills/`:
 - `qspec` turns a feature request into an executable spec.
 - `tdd` runs an approved change through red, green, and refactor.
 - `qcheck` performs an adversarial pre-ship review.
+
+Tier 2 adds two controller workflows:
+
 - `build-next` plans or builds one queued issue and never merges.
-- `triage-prs` handles bounded mechanical CI repair and escalation.
+- `triage-prs` performs provenance-bound diagnosis and escalation.
 
 Invoke skills using the syntax supported by the active harness. Claude Code
 also exposes the same sources as slash commands under `.claude/commands/`.
